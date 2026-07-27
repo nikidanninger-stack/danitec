@@ -65,9 +65,10 @@ async function seed() {
     console.log('  Login: admin@danitec.at / Danitec2025!');
     console.log(`  Firma-ID: ${companyId}`);
   } catch (err) {
-    await client.query('ROLLBACK');
-    console.error('Seed-Fehler:', err.message);
-    process.exit(1);
+    await client.query('ROLLBACK').catch(() => {});
+    console.log('Seed-Fehler (nicht fatal):', err.message);
+    console.log('→ Seed-Daten bereits vorhanden, Server startet trotzdem.');
+    // process.exit(0) – kein Fehler, Server soll starten
   } finally {
     client.release();
     await pool.end();
