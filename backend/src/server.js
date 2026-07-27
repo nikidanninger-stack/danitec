@@ -94,10 +94,17 @@ app.use((err, req, res, next) => {
   });
 });
 
-// ─── Migrationen automatisch ausführen, dann Server starten ──────────────────
+// ─── Server sofort starten, Migrationen im Hintergrund ──────────────────────
 const PORT = process.env.PORT || 3001;
 
-async function runMigrationsAndStart() {
+// Server startet SOFORT (Render-Timeout vermeiden)
+app.listen(PORT, () => {
+  logger.info(`Danitec Backend läuft auf Port ${PORT} (${process.env.NODE_ENV})`);
+  // Migrationen asynchron im Hintergrund ausführen
+  runMigrations().catch(err => logger.error('Migrations-Fehler: ' + err.message));
+});
+
+async function runMigrations() {
   try {
     const migFs   = require('fs');
     const migPath = require('path');
@@ -121,18 +128,13 @@ async function runMigrationsAndStart() {
           logger.error(`Migrations-Fehler: ${file}: ${migErr.message}`);
         }
       }
+      logger.info('Migrationen abgeschlossen.');
     } finally {
       client.release();
     }
   } catch (err) {
-    logger.error('Migrations-Fehler: ' + err.message);
+    logger.error('DB-Verbindung fehlgeschlagen: ' + err.message);
   }
-
-  app.listen(PORT, () => {
-    logger.info(`Danitec Backend läuft auf Port ${PORT} (${process.env.NODE_ENV})`);
-  });
 }
-
-runMigrationsAndStart();
 
 module.exports = app;
