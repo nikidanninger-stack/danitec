@@ -179,7 +179,7 @@ export function Dashboard({ onNavigate }) {
   const LB = '#2D9CDB'; // Danitec Hellblau
 
   const KPICard = ({icon, label, value, sub, color, onClick, accent}) => (
-    <div onClick={onClick} style={{
+    <div onClick={onClick} className="kpi-card" style={{
       background:'#fff', borderRadius:14, padding:'20px 22px',
       boxShadow:'0 1px 4px rgba(0,0,0,0.07), 0 4px 16px rgba(0,0,0,0.05)',
       cursor:onClick?'pointer':'default',
@@ -293,7 +293,7 @@ export function Dashboard({ onNavigate }) {
       </div>
 
       {/* ── MITTELSEKTION: Offene Rechnungen + Fällige Wartungen ── */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+      <div className="dash-mid-section" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
 
         <SectionCard>
           <SectionTitle icon="ti-file-invoice" action={<NavBtn label="Alle" page="invoices"/>}>Offene Rechnungen</SectionTitle>

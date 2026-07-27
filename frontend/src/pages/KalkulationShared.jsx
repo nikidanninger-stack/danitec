@@ -162,23 +162,27 @@ export function KatBlock({ kat, positionen, onChange, onDelete, onAdd, showHinwe
 
       {!collapsed && (
         <>
-          <div style={{
-            display: 'grid', gridTemplateColumns: ROW_GRID,
-            gap: 6, padding: '5px 12px',
-            background: 'var(--bg)', borderBottom: '1px solid var(--border)',
-          }}>
-            {['', 'Material / Leistung', 'Einheit', 'Menge', 'EK netto/Stk.', 'Aufschl.', 'VK brutto ges.', ''].map((h, i) => (
-              <div key={i} style={{
-                fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)',
-                textTransform: 'uppercase', letterSpacing: '0.07em',
-                textAlign: i >= 6 ? 'right' : 'left',
-              }}>{h}</div>
-            ))}
-          </div>
+          <div className="kalkulation-scroll">
+            <div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: ROW_GRID,
+                gap: 6, padding: '5px 12px',
+                background: 'var(--bg)', borderBottom: '1px solid var(--border)',
+              }}>
+                {['', 'Material / Leistung', 'Einheit', 'Menge', 'EK netto/Stk.', 'Aufschl.', 'VK brutto ges.', ''].map((h, i) => (
+                  <div key={i} style={{
+                    fontSize: 10, fontWeight: 700, color: 'var(--text-tertiary)',
+                    textTransform: 'uppercase', letterSpacing: '0.07em',
+                    textAlign: i >= 6 ? 'right' : 'left',
+                  }}>{h}</div>
+                ))}
+              </div>
 
-          {positionen.map(p => (
-            <PosRow key={p.id} pos={p} onChange={onChange} onDelete={onDelete} showHinweis={showHinweis} />
-          ))}
+              {positionen.map(p => (
+                <PosRow key={p.id} pos={p} onChange={onChange} onDelete={onDelete} showHinweis={showHinweis} />
+              ))}
+            </div>
+          </div>
 
           <div style={{ padding: '8px 12px', background: 'var(--bg)', borderTop: '1px solid var(--border)' }}>
             <button
@@ -207,7 +211,7 @@ export function KatBlock({ kat, positionen, onChange, onDelete, onAdd, showHinwe
 export function SummaryBar({ totals }) {
   const db_pct = totals.vkNetto > 0 ? totals.db / totals.vkNetto : 0;
   return (
-    <div style={{
+    <div className="summary-bar" style={{
       position: 'sticky', bottom: 0, zIndex: 30,
       background: 'var(--accent-dark)', borderTop: '2px solid var(--accent)',
       padding: '10px 24px', display: 'flex', gap: 24, alignItems: 'center', flexWrap: 'wrap',
@@ -220,7 +224,7 @@ export function SummaryBar({ totals }) {
         { label: 'VK gesamt brutto', value: fmt(totals.vkBrutto), color: '#60a5fa', big: true },
         { label: 'Aktive Pos.',      value: totals.aktivePos,    color: '#a5b4fc' },
       ].map(({ label, value, color, big }) => (
-        <div key={label} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <div key={label} className="summary-item" style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.07em', textTransform: 'uppercase' }}>{label}</span>
           <span style={{ fontSize: big ? 18 : 14, fontWeight: big ? 700 : 600, color }}>{value}</span>
         </div>

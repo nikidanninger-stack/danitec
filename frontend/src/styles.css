@@ -629,25 +629,28 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   }
   .sidebar.open { left: 0; }
 
-  /* Main content volle Breite */
-  .main-content { width: 100%; }
+  /* Main content volle Breite, kein horizontales Overflow */
+  .main-content { width: 100%; overflow-x: hidden; }
 
   /* Hamburger anzeigen */
   .menu-toggle { display: flex; align-items: center; justify-content: center; }
 
   /* Header */
-  .page-header { padding: 0 16px; gap: 10px; }
-  .page-header h1 { font-size: 14px; }
+  .page-header { padding: 0 12px; gap: 8px; }
+  .page-header h1 { font-size: 13px; }
   .page-header > div:last-child { display: none; }
 
   /* Page body */
-  .page-body { padding: 12px 14px; }
-  .dash-page  { padding: 12px 14px; }
+  .page-body { padding: 10px 10px; }
+  .dash-page  { padding: 10px 10px; }
 
-  /* Grids */
-  .dash-grid-4 { grid-template-columns: repeat(2, 1fr); gap: 8px; }
-  .dash-grid-2 { grid-template-columns: 1fr; }
-  .dash-grid-3 { grid-template-columns: 1fr; }
+  /* Grids – !important überschreibt inline style={{gap:...}} */
+  .dash-grid-4 { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+  .dash-grid-2 { grid-template-columns: 1fr !important; }
+  .dash-grid-3 { grid-template-columns: 1fr !important; }
+
+  /* Dashboard Mittelsektion (2-Spalten) → eine Spalte */
+  .dash-mid-section { grid-template-columns: 1fr !important; }
 
   /* Forms */
   .form-row   { grid-template-columns: 1fr; }
@@ -668,8 +671,21 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   table { font-size: 12px; }
   th, td { padding: 6px 8px; }
   .card-0 { overflow-x: auto; }
-  /* Alle Cards mit Tabellen scrollen horizontal */
+  /* Alle Cards/Container mit Tabellen scrollen horizontal */
   .card:has(table) { overflow-x: auto; }
+
+  /* Kalkulation-Tabelle: horizontales Scrollen */
+  .kalkulation-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .kalkulation-scroll > div { min-width: 480px; }
+
+  /* KPI-Card: weniger Padding auf Mobile */
+  .kpi-card { padding: 12px 14px !important; }
+  .kpi-card .kpi-value { font-size: 20px !important; }
+
+  /* Summary Bar Kalkulation: kompakter auf Mobile */
+  .summary-bar { gap: 10px !important; padding: 8px 14px !important; }
+  .summary-bar .summary-item span:first-child { font-size: 9px !important; }
+  .summary-bar .summary-item span:last-child  { font-size: 12px !important; }
 
   /* Modal */
   .modal { max-height: 95vh; }
@@ -715,11 +731,21 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   /* Buttons volle Breite in Filter-Bereich */
   .list-toolbar { flex-wrap: wrap; gap: 8px; }
   .list-toolbar .btn { flex-shrink: 0; }
+
+  /* Inline-Grid-Sections ohne Klasse: verhindert horizontalen Overflow */
+  .page-body > div[style*="grid"],
+  .dash-page > div[style*="grid"] {
+    overflow-x: hidden;
+  }
 }
 
 /* ─── SMALL MOBILE (≤480px) ─────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  .dash-grid-4 { grid-template-columns: 1fr 1fr; gap: 6px; }
+  .page-body { padding: 8px !important; }
+  .dash-page  { padding: 8px !important; }
+  .dash-grid-4 { grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+  .kpi-card { padding: 10px 12px !important; }
+  .kpi-card .kpi-value { font-size: 18px !important; }
   .dash-metric-value { font-size: 16px; }
   .metric-value { font-size: 17px; }
 }
