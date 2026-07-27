@@ -7,10 +7,13 @@
     "dev": "concurrently \"npm --prefix backend run dev\" \"npm --prefix frontend run dev\"",
     "setup": "npm install --prefix backend && npm install --prefix frontend",
     "build": "npm install --prefix frontend && npm run build --prefix frontend",
-    "start": "node backend/src/server.js"
+    "start": "node backend/src/server.js",
+    "postinstall": "npm install --prefix backend --omit=dev && npm install --prefix frontend"
   },
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "concurrently": "^8.2.2",
+    "vite": "^5.3.3",
+    "@vitejs/plugin-react": "^4.3.1"
   },
   "engines": {
     "node": ">=20.0.0"
