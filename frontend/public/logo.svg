@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 118">
+  <!-- DANI - dark navy -->
+  <text x="6" y="86"
+    font-family="'Arial Black','Arial Bold','Impact',sans-serif"
+    font-size="86" font-weight="900" font-style="italic"
+    fill="#152248" letter-spacing="-1">DANI</text>
+  <!-- TEC - bright blue -->
+  <text x="253" y="86"
+    font-family="'Arial Black','Arial Bold','Impact',sans-serif"
+    font-size="86" font-weight="900" font-style="italic"
+    fill="#2D9CDB" letter-spacing="-1">TEC</text>
+  <!-- Left line -->
+  <line x1="6" y1="100" x2="42" y2="100" stroke="#152248" stroke-width="1.5"/>
+  <!-- Subtitle -->
+  <text x="50" y="105"
+    font-family="Arial,Helvetica,sans-serif"
+    font-size="10.5" font-weight="400" letter-spacing="4"
+    fill="#152248">KÄLTE &amp; KLIMATECHNIK</text>
+  <!-- Right line -->
+  <line x1="356" y1="100" x2="392" y2="100" stroke="#152248" stroke-width="1.5"/>
+</svg>
