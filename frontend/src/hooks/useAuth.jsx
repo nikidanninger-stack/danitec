@@ -8,20 +8,34 @@ export function AuthProvider({ children }) {
   const [company, setCompany] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Token prüfen beim Start
+  // Auto-Login beim Start – kein Passwort nötig
   useEffect(() => {
     const token = localStorage.getItem('danitec_token');
-    if (!token) { setLoading(false); return; }
+
+    const doAutoLogin = () =>
+      api.login('admin@danitec.at', 'Danitec2025!')
+        .then(data => {
+          localStorage.setItem('danitec_token', data.token);
+          setUser(data.user);
+          setCompany(data.company);
+        })
+        .catch(() => {})
+        .finally(() => setLoading(false));
+
+    if (!token) {
+      doAutoLogin();
+      return;
+    }
+
+    // Vorhandenen Token prüfen, bei Fehler neu einloggen
     api.me()
       .then(meData => {
         setUser(meData.user);
         return api.company().then(coData => setCompany(coData.company)).catch(() => {});
       })
-      .catch(err => {
-        // Token nur bei 401 löschen, nicht bei Netzwerkfehler
-        if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
-          localStorage.removeItem('danitec_token');
-        }
+      .catch(() => {
+        localStorage.removeItem('danitec_token');
+        return doAutoLogin();
       })
       .finally(() => setLoading(false));
   }, []);
