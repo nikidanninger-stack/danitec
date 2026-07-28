@@ -223,12 +223,12 @@ export function Dashboard({ onNavigate }) {
   );
 
   return (
-    <div style={{padding:'20px 24px',background:'#f4f6fa',minHeight:'100%'}}>
+    <div className="dash-page" style={{background:'#f4f6fa',minHeight:'100%'}}>
 
       {/* ── HERO BANNER ── */}
-      <div style={{
+      <div className="dash-hero" style={{
         background:`linear-gradient(135deg, ${DN} 0%, #1e4d8c 60%, ${LB} 100%)`,
-        borderRadius:16, padding:'22px 28px', marginBottom:22,
+        borderRadius:16, padding:'22px 28px', marginBottom:16,
         display:'flex', alignItems:'center', justifyContent:'space-between',
         boxShadow:'0 4px 24px rgba(21,34,72,0.30)',
         position:'relative', overflow:'hidden',
@@ -247,9 +247,18 @@ export function Dashboard({ onNavigate }) {
             }
           </div>
         </div>
-        <div style={{position:'relative',textAlign:'right'}}>
-          <img src="/logo.png" alt="DANITEC" style={{height:52,objectFit:'contain',filter:'brightness(0) invert(1)',opacity:0.9}}
-            onError={e=>{ e.target.style.display='none'; }}/>
+        {/* Logo-Bereich rechts */}
+        <div style={{position:'relative',textAlign:'right',flexShrink:0,marginLeft:16}}>
+          <img src="/logo.png" alt="DANITEC"
+            style={{height:52,objectFit:'contain',filter:'brightness(0) invert(1)',opacity:0.92,display:'block'}}
+            onError={e=>{
+              e.target.style.display='none';
+              e.target.nextSibling.style.display='flex';
+            }}/>
+          <div style={{display:'none',flexDirection:'column',alignItems:'flex-end',gap:2}}>
+            <span style={{fontSize:22,fontWeight:900,color:'#fff',letterSpacing:2,lineHeight:1}}>DANITEC</span>
+            <span style={{fontSize:10,color:'rgba(255,255,255,0.6)',letterSpacing:1.5,textTransform:'uppercase'}}>Kälte · Klima · Service</span>
+          </div>
         </div>
       </div>
 
