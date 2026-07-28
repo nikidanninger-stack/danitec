@@ -702,13 +702,14 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   table { font-size: 12px; }
   th, td { padding: 6px 8px; white-space: nowrap; }
   .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .card-0 { overflow-x: auto; }
+  /* card-0 overflow-x: visible so inner .kalkulation-scroll can scroll independently */
+  .card-0 { overflow: visible !important; }
 
   /* ── KALKULATION: Tabellen-Scroll ──
      ROW_GRID fixed cols = 36+52+68+88+70+100+26 = 440px + 7×6px gaps = 482px
-     + mindestens 160px für Produktname → min-width 650px              */
+     + 368px für Produktname → min-width 850px (zeigt ~49 Zeichen)    */
   .kalkulation-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .kalkulation-scroll > div { min-width: 650px; }
+  .kalkulation-scroll > div { min-width: 850px; }
 
   /* Summary Bar Kalkulation: kompakter */
   .summary-bar { gap: 10px !important; padding: 8px 14px !important; }
