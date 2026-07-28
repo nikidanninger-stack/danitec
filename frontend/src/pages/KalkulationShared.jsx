@@ -236,9 +236,10 @@ export function SummaryBar({ totals }) {
 // ─── Projekt-Header ───────────────────────────────────────────────────────────
 export function ProjektHeader({ projekt, setProjekt, datum, setDatum, globalAufschlag, setGlobalAufschlag, onApplyGlobal, showHinweis, setShowHinweis, onReset, onSaveOffer, onPrint }) {
   return (
-    <div className="card" style={{ marginBottom: 16 }}>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 14, alignItems: 'flex-end' }}>
-        <div style={{ flex: '1 1 220px' }}>
+    <div className="card projekt-header" style={{ marginBottom: 16 }}>
+      {/* Zeile 1: Projekt + Datum + Aufschlag */}
+      <div className="projekt-header-row1">
+        <div style={{ flex: '1 1 180px', minWidth: 0 }}>
           <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 5 }}>
             <i className="ti ti-user" style={{ marginRight: 4 }} />Projekt / Kunde
           </label>
@@ -246,14 +247,14 @@ export function ProjektHeader({ projekt, setProjekt, datum, setDatum, globalAufs
             placeholder="z. B. Mustermann GmbH – Lager Wien"
             style={{ width: '100%', padding: '7px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 14 }} />
         </div>
-        <div>
+        <div style={{ flexShrink: 0 }}>
           <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 5 }}>
             <i className="ti ti-calendar" style={{ marginRight: 4 }} />Datum
           </label>
           <input type="date" value={datum} onChange={e => setDatum(e.target.value)}
-            style={{ padding: '7px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 14 }} />
+            style={{ padding: '7px 10px', border: '1px solid var(--border-strong)', borderRadius: 'var(--radius-md)', fontSize: 14, width: '100%' }} />
         </div>
-        <div>
+        <div style={{ flexShrink: 0 }}>
           <label style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: '0.07em', display: 'block', marginBottom: 5 }}>
             <i className="ti ti-percentage" style={{ marginRight: 4 }} />Aufschlag alle Pos.
           </label>
@@ -266,21 +267,22 @@ export function ProjektHeader({ projekt, setProjekt, datum, setDatum, globalAufs
             </button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8, marginLeft: 'auto', alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer', paddingBottom: 6 }}>
-            <input type="checkbox" checked={showHinweis} onChange={e => setShowHinweis(e.target.checked)} style={{ width: 14, height: 14 }} />
-            Hinweise
-          </label>
-          <button className="btn ghost" onClick={onReset}>
-            <i className="ti ti-refresh" />Zurücksetzen
-          </button>
-          <button className="btn" style={{ background: 'var(--green)', color: '#fff' }} onClick={onSaveOffer}>
-            <i className="ti ti-device-floppy" />Als Angebot speichern
-          </button>
-          <button className="btn" style={{ background: '#152248', color: '#fff' }} onClick={onPrint}>
-            <i className="ti ti-printer" />PDF / Drucken
-          </button>
-        </div>
+      </div>
+      {/* Zeile 2: Optionen + Buttons */}
+      <div className="projekt-header-row2">
+        <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, color: 'var(--text-secondary)', cursor: 'pointer' }}>
+          <input type="checkbox" checked={showHinweis} onChange={e => setShowHinweis(e.target.checked)} style={{ width: 14, height: 14 }} />
+          Hinweise
+        </label>
+        <button className="btn ghost" onClick={onReset}>
+          <i className="ti ti-refresh" />Zurücksetzen
+        </button>
+        <button className="btn" style={{ background: 'var(--green)', color: '#fff' }} onClick={onSaveOffer}>
+          <i className="ti ti-device-floppy" />Als Angebot speichern
+        </button>
+        <button className="btn" style={{ background: '#152248', color: '#fff' }} onClick={onPrint}>
+          <i className="ti ti-printer" />PDF / Drucken
+        </button>
       </div>
     </div>
   );

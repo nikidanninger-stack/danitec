@@ -602,6 +602,24 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   margin-bottom: 14px;
 }
 
+/* ── Kalkulation ProjektHeader: Desktop-Layout ── */
+.projekt-header-row1 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+.projekt-header-row2 {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Allgemeine 2-Spalten-Helfer-Klasse ── */
+.two-col-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+
 /* Workspace zwei-Panel Layout */
 .workspace-layout {
   display: flex;
@@ -629,8 +647,13 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   }
   .sidebar.open { left: 0; }
 
-  /* Main content volle Breite, kein horizontales Overflow */
-  .main-content { width: 100%; overflow-x: hidden; }
+  /* Main content: volle Breite, iOS-Scroll-Fix */
+  .main-content {
+    width: 100%;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 
   /* Hamburger anzeigen */
   .menu-toggle { display: flex; align-items: center; justify-content: center; }
@@ -641,54 +664,75 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
   .page-header > div:last-child { display: none; }
 
   /* Page body */
-  .page-body { padding: 10px 10px; }
-  .dash-page  { padding: 10px 10px; }
+  .page-body { padding: 10px; }
+  .dash-page  { padding: 10px; }
 
-  /* Grids – !important überschreibt inline style={{gap:...}} */
-  .dash-grid-4 { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+  /* ── DASHBOARD: alle KPI-Cards in einer Spalte ── */
+  .dash-grid-4 { grid-template-columns: 1fr !important; gap: 8px !important; }
   .dash-grid-2 { grid-template-columns: 1fr !important; }
   .dash-grid-3 { grid-template-columns: 1fr !important; }
-
-  /* Dashboard Mittelsektion (2-Spalten) → eine Spalte */
   .dash-mid-section { grid-template-columns: 1fr !important; }
+
+  /* Allgemeine 2-Spalten-Grids (mit Klasse) → 1 Spalte */
+  .two-col-grid { grid-template-columns: 1fr !important; }
+
+  /* KPI-Card Padding */
+  .kpi-card { padding: 12px 14px !important; }
 
   /* Forms */
   .form-row   { grid-template-columns: 1fr; }
   .form-row-3 { grid-template-columns: 1fr; }
 
   /* Metric grid */
-  .metric-grid { grid-template-columns: repeat(2, 1fr); }
+  .metric-grid   { grid-template-columns: repeat(2, 1fr); }
   .metric-grid-4 { grid-template-columns: repeat(2, 1fr) !important; }
   .metric-grid-3 { grid-template-columns: repeat(2, 1fr) !important; }
 
-  /* Quarterly grid (USt-Übersicht) */
+  /* Quarterly grid → 2 Spalten (Q1–Q4 kompakt) */
   .quarterly-grid { grid-template-columns: repeat(2, 1fr); }
 
   /* Dashboard Bottom 3-col → 1-col */
   .dash-bottom-3 { grid-template-columns: 1fr; }
 
-  /* Tabellen: horizontal scrollbar wo nötig */
+  /* ── TABELLEN: immer horizontal scrollbar ── */
   table { font-size: 12px; }
-  th, td { padding: 6px 8px; }
+  th, td { padding: 6px 8px; white-space: nowrap; }
+  .table-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .card-0 { overflow-x: auto; }
-  /* Alle Cards/Container mit Tabellen scrollen horizontal */
-  .card:has(table) { overflow-x: auto; }
 
-  /* Kalkulation-Tabelle: horizontales Scrollen */
+  /* ── KALKULATION: Tabellen-Scroll ── */
   .kalkulation-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .kalkulation-scroll > div { min-width: 480px; }
 
-  /* KPI-Card: weniger Padding auf Mobile */
-  .kpi-card { padding: 12px 14px !important; }
-  .kpi-card .kpi-value { font-size: 20px !important; }
-
-  /* Summary Bar Kalkulation: kompakter auf Mobile */
+  /* Summary Bar Kalkulation: kompakter */
   .summary-bar { gap: 10px !important; padding: 8px 14px !important; }
-  .summary-bar .summary-item span:first-child { font-size: 9px !important; }
-  .summary-bar .summary-item span:last-child  { font-size: 12px !important; }
+  .summary-item span:first-child { font-size: 9px !important; }
+  .summary-item span:last-child  { font-size: 12px !important; }
+
+  /* ── PROJEKT-HEADER (Kalkulation) ── */
+  .projekt-header { padding: 12px 14px !important; }
+  .projekt-header-row1 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .projekt-header-row1 > div { flex: 1 1 140px; min-width: 0; }
+  .projekt-header-row2 {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+  }
+  .projekt-header-row2 .btn { flex-shrink: 0; font-size: 12px; padding: 6px 10px; }
+
+  /* ── USt-ÜBERSICHT: 3 Boxen stapeln ── */
+  .ust-boxes-row { flex-direction: column !important; gap: 8px !important; }
+  .ust-box       { min-width: unset !important; flex: none !important; width: 100%; }
+  .ust-arrow     { display: none !important; }
 
   /* Modal */
-  .modal { max-height: 95vh; }
+  .modal { max-height: 95vh; max-width: calc(100vw - 20px); }
   .modal-body { padding: 14px; }
 
   /* Login */
@@ -719,33 +763,23 @@ code { font-size: 12px; background: var(--bg); padding: 1px 6px; border-radius: 
     overflow-y: auto;
   }
 
-  /* EA / USt zwei-Spalten-Grids → eine Spalte */
-  .ea-two-col,
-  .ust-two-col {
-    grid-template-columns: 1fr !important;
-  }
+  /* EA / USt explizite zwei-Spalten-Klassen → 1 Spalte */
+  .ea-two-col, .ust-two-col { grid-template-columns: 1fr !important; }
 
   /* Filter-Chips wrappen */
   .filter-chips { flex-wrap: wrap; gap: 6px; }
 
-  /* Buttons volle Breite in Filter-Bereich */
+  /* Buttons in Toolbar wrappen */
   .list-toolbar { flex-wrap: wrap; gap: 8px; }
   .list-toolbar .btn { flex-shrink: 0; }
-
-  /* Inline-Grid-Sections ohne Klasse: verhindert horizontalen Overflow */
-  .page-body > div[style*="grid"],
-  .dash-page > div[style*="grid"] {
-    overflow-x: hidden;
-  }
 }
 
 /* ─── SMALL MOBILE (≤480px) ─────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  .page-body { padding: 8px !important; }
-  .dash-page  { padding: 8px !important; }
-  .dash-grid-4 { grid-template-columns: 1fr 1fr !important; gap: 6px !important; }
+  .page-body, .dash-page { padding: 8px !important; }
   .kpi-card { padding: 10px 12px !important; }
-  .kpi-card .kpi-value { font-size: 18px !important; }
   .dash-metric-value { font-size: 16px; }
   .metric-value { font-size: 17px; }
+  /* Quarterly grid → 1 Spalte auf sehr kleinen Screens */
+  .quarterly-grid { grid-template-columns: 1fr 1fr; }
 }

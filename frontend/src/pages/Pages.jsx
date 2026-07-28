@@ -1668,7 +1668,7 @@ export function Products({ defaultTab }) {
       )}
 
       {/* Tabelle */}
-      <div className="card" style={{padding:0,overflow:'hidden'}}>
+      <div className="card" style={{padding:0}}>
         {loading ? <Spinner/> : items.length === 0 ? (
           <EmptyState
             icon={tab==='services'?'ti-briefcase':'ti-package'}
@@ -1676,7 +1676,7 @@ export function Products({ defaultTab }) {
             subtitle={tab==='services'?'Füge Stundensätze und Leistungen hinzu.':'Füge Materialien mit Lagerbestand hinzu.'}
           />
         ) : (
-          <table>
+          <div className="table-wrap"><table>
             <thead>
               {tab === 'services' ? (
                 <tr><th>Art.-Nr.</th><th>Bezeichnung</th><th>Einheit</th><th style={{textAlign:'right'}}>Netto</th><th style={{textAlign:'right'}}>Brutto</th><th>USt</th><th/></tr>
@@ -1734,7 +1734,7 @@ export function Products({ defaultTab }) {
                 }
               })}
             </tbody>
-          </table>
+          </table></div>
         )}
       </div>
 
@@ -2324,23 +2324,23 @@ export function VATReport() {
       {/* ── Visuelle Erklärung: Wie funktioniert die USt? ── */}
       <div className="card" style={{marginBottom:16,padding:'16px 20px'}}>
         <div style={{fontSize:12,fontWeight:600,color:'var(--text-tertiary)',textTransform:'uppercase',letterSpacing:.5,marginBottom:14}}>Wie funktioniert die Umsatzsteuer?</div>
-        <div style={{display:'flex',alignItems:'center',gap:0,flexWrap:'wrap'}}>
+        <div className="ust-boxes-row" style={{display:'flex',alignItems:'center',gap:0,flexWrap:'wrap'}}>
           {/* Box 1 */}
-          <div style={{flex:1,minWidth:160,background:'var(--green-light)',border:'1px solid rgba(16,185,129,.3)',borderRadius:'var(--radius-md)',padding:'14px 16px'}}>
+          <div className="ust-box" style={{flex:1,minWidth:140,background:'var(--green-light)',border:'1px solid rgba(16,185,129,.3)',borderRadius:'var(--radius-md)',padding:'14px 16px'}}>
             <div style={{fontSize:10,fontWeight:700,color:'var(--green)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>① USt aus Rechnungen</div>
             <div style={{fontSize:22,fontWeight:700,color:'var(--green)'}}>{fmt(ustOut)}</div>
             <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:4}}>Du hast deinen Kunden {fmt(ustOut)} USt in Rechnung gestellt und von ihnen kassiert. Dieses Geld gehört dem Finanzamt.</div>
           </div>
           {/* Pfeil */}
-          <div style={{padding:'0 12px',fontSize:22,color:'var(--text-tertiary)',flexShrink:0}}>−</div>
+          <div className="ust-arrow" style={{padding:'0 12px',fontSize:22,color:'var(--text-tertiary)',flexShrink:0}}>−</div>
           {/* Box 2 */}
-          <div style={{flex:1,minWidth:160,background:'var(--blue-light)',border:'1px solid rgba(24,95,165,.25)',borderRadius:'var(--radius-md)',padding:'14px 16px'}}>
+          <div className="ust-box" style={{flex:1,minWidth:140,background:'var(--blue-light)',border:'1px solid rgba(24,95,165,.25)',borderRadius:'var(--radius-md)',padding:'14px 16px'}}>
             <div style={{fontSize:10,fontWeight:700,color:'var(--accent)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>② Vorsteuer aus Ausgaben</div>
             <div style={{fontSize:22,fontWeight:700,color:'var(--accent)'}}>{fmt(vorst)}</div>
             <div style={{fontSize:11,color:'var(--text-secondary)',marginTop:4}}>Du hast bei Einkäufen {fmt(vorst)} USt bezahlt. Diese bekommst du vom Finanzamt zurück (als Abzug).</div>
           </div>
           {/* Pfeil */}
-          <div style={{padding:'0 12px',fontSize:22,color:'var(--text-tertiary)',flexShrink:0}}>=</div>
+          <div className="ust-arrow" style={{padding:'0 12px',fontSize:22,color:'var(--text-tertiary)',flexShrink:0}}>=</div>
           {/* Box 3 – Ergebnis */}
           <div style={{flex:1,minWidth:160,background:gutschrift?'var(--green-light)':'rgba(220,38,38,.08)',border:`1px solid ${gutschrift?'rgba(16,185,129,.3)':'rgba(220,38,38,.3)'}`,borderRadius:'var(--radius-md)',padding:'14px 16px'}}>
             <div style={{fontSize:10,fontWeight:700,color:gutschrift?'var(--green)':'var(--red)',textTransform:'uppercase',letterSpacing:.5,marginBottom:6}}>{gutschrift?'③ Gutschrift vom FA':'③ Zahllast ans Finanzamt'}</div>
@@ -2389,7 +2389,7 @@ export function VATReport() {
       </div>
 
       {/* ── Aufschlüsselung nach Steuersatz ── */}
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
+      <div className="two-col-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16,marginBottom:16}}>
         <div className="card">
           <div className="card-title"><i className="ti ti-arrow-up-right" style={{color:'var(--green)'}}/>USt Ausgang nach Steuersatz</div>
           <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:10}}>Diese USt hast du von Kunden kassiert und schuldest dem Finanzamt.</div>
@@ -2509,7 +2509,7 @@ export function EAReport() {
         <div className="metric-card"><div className="metric-label">AfA Abschreibungen</div><div className="metric-value amber">{fmt(data.afa)}</div></div>
         <div className="metric-card"><div className="metric-label">Gewinn / Verlust</div><div className={`metric-value ${(data.gewinn||0)>=0?'blue':'red'}`}>{fmt(data.gewinn)}</div></div>
       </div>
-      <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+      <div className="two-col-grid" style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
         <div className="card">
           <div className="card-title"><i className="ti ti-trending-up" style={{color:'var(--green)'}}/>Einnahmen</div>
           {(data.einnahmen?.positionen||[]).map((r,i)=>(
