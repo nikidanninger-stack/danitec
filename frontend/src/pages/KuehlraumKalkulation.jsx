@@ -501,7 +501,7 @@ export default function KuehlraumKalkulation() {
   }, { ekGes: 0, vkNetto: 0, db: 0, ust: 0, vkBrutto: 0, aktivePos: 0 });
 
   return (
-    <div style={{ padding: '16px 24px 100px', maxWidth: 1100, margin: '0 auto' }}>
+    <div className="page-body" style={{ paddingBottom: 100 }}>
       <ProjektHeader
         projekt={projekt}             setProjekt={setProjekt}
         datum={datum}                 setDatum={setDatum}
