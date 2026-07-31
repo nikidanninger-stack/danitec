@@ -233,7 +233,8 @@ export const api = {
   // Lieferant aus URL extrahieren
   supplierExtract: (text) => request('POST', '/supplier-extract', { text }),
   supplierLookupByName: (name) => request('POST', '/supplier-extract/lookup-by-name', { name }),
-  aiImproveText: (text, field) => request('POST', '/ai-text', { text, field }),
+  aiImproveText:  (text, field) => request('POST', '/ai-text', { text, field }),
+  plaudAnalyse:   (transcript)  => request('POST', '/plaud-analyse', { transcript }),
 
   // Benutzer (für Techniker-Dropdown)
   users:               ()             => request('GET', '/auth/users'),

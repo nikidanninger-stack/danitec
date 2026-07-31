@@ -6839,3 +6839,533 @@ function IncomingInvoicesInner() {
     </div>
   );
 }
+
+// ─── PLAUD: Kundengespräch → Kunde + Angebot + Aufgaben anlegen ───────────────
+export function PlaudImport({ onNavigate }) {
+  const [step,        setStep]        = React.useState('input');   // input|loading|review|done
+  const [transcript,  setTranscript]  = React.useState('');
+  const [tab,         setTab]         = React.useState('kunde');
+  const [saving,      setSaving]      = React.useState(false);
+  const [done,        setDone]        = React.useState(null);      // { customerId, offerId }
+
+  // ─── Editierbare Felder (nach KI-Analyse befüllt) ─────────────────────────
+  const [kunde, setKunde] = React.useState({
+    type:'business', companyName:'', firstName:'', lastName:'',
+    email:'', phone:'', street:'', houseNumber:'', zip:'', city:'', notes:'',
+  });
+  const [projekt,    setProjekt]    = React.useState({ bezeichnung:'', beschreibung:'', standort:'' });
+  const [positionen, setPositionen] = React.useState([]);
+  const [aufgaben,   setAufgaben]   = React.useState([]);
+  const [fehlend,    setFehlend]    = React.useState([]);
+  const [fehlendWerte, setFehlendWerte] = React.useState({});
+
+  const sk = (k, v) => setKunde(p => ({ ...p, [k]: v }));
+  const sp = (k, v) => setProjekt(p => ({ ...p, [k]: v }));
+
+  // ─── Schritt 1: Analysieren ────────────────────────────────────────────────
+  const analyse = async () => {
+    if (!transcript.trim()) return;
+    setStep('loading');
+    try {
+      const r = await api.plaudAnalyse(transcript);
+      const k = r.kunde || {};
+      setKunde({
+        type: k.companyName ? 'business' : 'private',
+        companyName: k.companyName || '',
+        firstName:   k.firstName   || '',
+        lastName:    k.lastName    || '',
+        email:       k.email       || '',
+        phone:       k.phone       || '',
+        street:      k.street      || '',
+        houseNumber: k.houseNumber || '',
+        zip:         k.zip         || '',
+        city:        k.city        || '',
+        notes:       k.notes       || '',
+      });
+      setProjekt({
+        bezeichnung:  (r.projekt?.bezeichnung)  || '',
+        beschreibung: (r.projekt?.beschreibung) || '',
+        standort:     (r.projekt?.standort)     || '',
+      });
+      setPositionen(r.angebot_positionen || []);
+      setAufgaben(r.aufgaben || []);
+      setFehlend(r.fehlende_infos || []);
+      setFehlendWerte({});
+      setTab('kunde');
+      setStep('review');
+    } catch (e) {
+      alert('Fehler bei der KI-Analyse: ' + e.message);
+      setStep('input');
+    }
+  };
+
+  // ─── Schritt 2: Alles anlegen ─────────────────────────────────────────────
+  const anlegen = async () => {
+    setSaving(true);
+    try {
+      // Fehlende Infos in Notizen einfließen lassen
+      const offeneFelder = fehlend
+        .filter(f => fehlendWerte[f.feld])
+        .map(f => `${f.label}: ${fehlendWerte[f.feld]}`).join('\n');
+
+      const notizen = [
+        kunde.notes,
+        projekt.beschreibung ? `Projekt: ${projekt.beschreibung}` : '',
+        projekt.standort     ? `Standort: ${projekt.standort}` : '',
+        offeneFelder,
+      ].filter(Boolean).join('\n');
+
+      // 1. Kunde anlegen
+      const custR = await api.createCustomer({
+        type:        kunde.type,
+        companyName: kunde.companyName || undefined,
+        firstName:   kunde.firstName   || undefined,
+        lastName:    kunde.lastName    || undefined,
+        email:       fehlendWerte['email']   || kunde.email   || undefined,
+        phone:       fehlendWerte['phone']   || kunde.phone   || undefined,
+        street:      fehlendWerte['street']  || kunde.street  || undefined,
+        houseNumber: kunde.houseNumber || undefined,
+        zip:         fehlendWerte['zip']     || kunde.zip     || undefined,
+        city:        fehlendWerte['city']    || kunde.city    || undefined,
+        notes:       notizen || undefined,
+      });
+      const customerId = custR.id || custR.customer?.id;
+
+      // 2. Angebot anlegen (wenn Positionen vorhanden)
+      let offerId = null;
+      if (positionen.length > 0 && customerId) {
+        const today = new Date().toISOString().slice(0, 10);
+        const valid = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+        const pos = positionen.map((p, i) => ({
+          position_number: i + 1,
+          description:     p.name,
+          quantity:        p.menge    || 1,
+          unit:            p.einheit  || 'Stk.',
+          unit_price_net:  0,
+          vat_rate:        20,
+          net_amount:      0,
+          vat_amount:      0,
+          gross_amount:    0,
+        }));
+        const offerR = await api.createOffer({
+          customerId,
+          documentDate: today,
+          validUntil:   valid,
+          subject:      projekt.bezeichnung || 'Angebot aus Kundengespräch',
+          netTotal:     0, vatTotal: 0, grossTotal: 0,
+          positions:    pos,
+        });
+        offerId = offerR.id || offerR.offer?.id || offerR.document?.id;
+      }
+
+      // 3. Aufgaben als Workspace-Karten (best-effort)
+      if (aufgaben.length > 0) {
+        try {
+          const boards = await api.wsBoards();
+          let boardId = boards.find(b =>
+            b.title?.toLowerCase().includes('aufgabe') ||
+            b.title?.toLowerCase().includes('plaud') ||
+            b.title?.toLowerCase().includes('todo')
+          )?.id;
+          if (!boardId && boards.length > 0) boardId = boards[0].id;
+          if (boardId) {
+            for (const a of aufgaben) {
+              await api.createWsCard(boardId, {
+                title:       a.text,
+                description: a.prioritaet ? `Priorität: ${a.prioritaet}` : '',
+              });
+            }
+          }
+        } catch (_) { /* Workspace nicht verfügbar → ignorieren */ }
+      }
+
+      setDone({ customerId, offerId });
+      setStep('done');
+    } catch (e) {
+      alert('Fehler beim Anlegen: ' + e.message);
+    }
+    setSaving(false);
+  };
+
+  // ─── Styles ───────────────────────────────────────────────────────────────
+  const card  = { background:'var(--surface)', border:'1px solid var(--border)', borderRadius:'var(--radius-lg)', padding:'20px 22px', marginBottom:14 };
+  const lbl   = { fontSize:11, fontWeight:700, color:'var(--text-secondary)', textTransform:'uppercase', letterSpacing:'0.07em', display:'block', marginBottom:5 };
+  const inp   = { width:'100%', padding:'8px 10px', border:'1px solid var(--border-strong)', borderRadius:'var(--radius-md)', fontSize:14, boxSizing:'border-box' };
+  const tabSt = (id) => ({
+    padding:'8px 16px', border:'none', cursor:'pointer', fontSize:13, fontWeight:600, borderRadius:'var(--radius-md)',
+    background: tab===id ? 'var(--accent)' : 'transparent',
+    color:      tab===id ? '#fff'          : 'var(--text-secondary)',
+    transition: 'background 0.15s',
+  });
+  const badgeSt = (color) => ({ fontSize:10, padding:'2px 7px', borderRadius:10, background:color+'22', color, fontWeight:700, marginLeft:6 });
+
+  // ─── DONE ─────────────────────────────────────────────────────────────────
+  if (step === 'done' && done) {
+    return (
+      <div className="page-body">
+        <div style={{ ...card, textAlign:'center', padding:'48px 32px' }}>
+          <i className="ti ti-circle-check" style={{ fontSize:52, color:'var(--green)', display:'block', marginBottom:16 }}/>
+          <h2 style={{ fontSize:20, fontWeight:700, marginBottom:8 }}>Alles angelegt!</h2>
+          <p style={{ color:'var(--text-secondary)', marginBottom:28, fontSize:14 }}>
+            Kunde{done.offerId ? ' und Angebot wurden' : ' wurde'} erfolgreich angelegt.
+            {aufgaben.length > 0 && ' Aufgaben wurden im Workspace gespeichert.'}
+          </p>
+          <div style={{ display:'flex', gap:12, justifyContent:'center', flexWrap:'wrap' }}>
+            {done.customerId && (
+              <button className="btn primary" onClick={() => onNavigate?.('customers')}>
+                <i className="ti ti-users"/> Zu den Kunden
+              </button>
+            )}
+            {done.offerId && (
+              <button className="btn" style={{ background:'var(--accent-dark)', color:'#fff' }} onClick={() => onNavigate?.('offers')}>
+                <i className="ti ti-clipboard"/> Zum Angebot
+              </button>
+            )}
+            {aufgaben.length > 0 && (
+              <button className="btn ghost" onClick={() => onNavigate?.('workspace')}>
+                <i className="ti ti-layout-board"/> Workspace
+              </button>
+            )}
+            <button className="btn ghost" onClick={() => { setStep('input'); setTranscript(''); setDone(null); }}>
+              <i className="ti ti-refresh"/> Neues Gespräch
+            </button>
+          </div>
+        </div>
+        {/* Aufgaben-Übersicht */}
+        {aufgaben.length > 0 && (
+          <div style={card}>
+            <div style={{ fontWeight:700, fontSize:14, marginBottom:12, display:'flex', alignItems:'center', gap:8 }}>
+              <i className="ti ti-list-check" style={{ color:'var(--accent)' }}/>
+              Offene Aufgaben
+            </div>
+            {aufgaben.map((a, i) => (
+              <div key={i} style={{ display:'flex', alignItems:'flex-start', gap:10, padding:'8px 0', borderBottom:i<aufgaben.length-1?'1px solid var(--border)':'none' }}>
+                <i className="ti ti-circle" style={{ color:'var(--text-tertiary)', marginTop:2, flexShrink:0 }}/>
+                <span style={{ fontSize:13 }}>{a.text}</span>
+                {a.prioritaet==='hoch' && <span style={badgeSt('#ef4444')}>HOCH</span>}
+                {a.prioritaet==='mittel' && <span style={badgeSt('#f59e0b')}>MITTEL</span>}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ─── LOADING ──────────────────────────────────────────────────────────────
+  if (step === 'loading') {
+    return (
+      <div className="page-body" style={{ display:'flex', alignItems:'center', justifyContent:'center', minHeight:320 }}>
+        <div style={{ textAlign:'center' }}>
+          <i className="ti ti-brain" style={{ fontSize:44, color:'var(--accent)', display:'block', marginBottom:16, animation:'spin 1.5s linear infinite' }}/>
+          <div style={{ fontWeight:700, fontSize:16, marginBottom:6 }}>KI analysiert das Gespräch…</div>
+          <div style={{ color:'var(--text-secondary)', fontSize:13 }}>Kundendaten, Aufgaben und Angebotspositionen werden extrahiert</div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── INPUT ────────────────────────────────────────────────────────────────
+  if (step === 'input') {
+    return (
+      <div className="page-body">
+        {/* Hero */}
+        <div style={{ ...card, background:'linear-gradient(135deg, var(--accent-dark), var(--accent))', border:'none', color:'#fff', marginBottom:20 }}>
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <div style={{ fontSize:36 }}>🎙️</div>
+            <div>
+              <div style={{ fontWeight:800, fontSize:18, marginBottom:4 }}>Plaud Kundengespräch</div>
+              <div style={{ fontSize:13, opacity:0.85 }}>
+                Füge das Transkript aus der Plaud-App ein — die KI erstellt automatisch den Kunden, ein Angebot und Aufgaben.
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Anleitung */}
+        <div style={{ ...card, display:'flex', gap:0, padding:0, overflow:'hidden' }}>
+          {[
+            { num:'1', icon:'ti-microphone', text:'Mit Plaud aufnehmen', sub:'Gespräch beim Kunden aufnehmen' },
+            { num:'2', icon:'ti-file-text',  text:'Transkript kopieren',  sub:'Aus Plaud-App exportieren' },
+            { num:'3', icon:'ti-sparkles',   text:'KI analysiert',        sub:'Alles wird automatisch erkannt' },
+            { num:'4', icon:'ti-circle-check',text:'Überprüfen & anlegen', sub:'Daten prüfen, ergänzen, fertig' },
+          ].map((s, i, arr) => (
+            <div key={i} style={{ flex:1, padding:'14px 12px', borderRight: i<arr.length-1 ? '1px solid var(--border)' : 'none', textAlign:'center' }}>
+              <div style={{ width:28, height:28, borderRadius:'50%', background:'var(--accent)', color:'#fff', fontSize:12, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center', margin:'0 auto 8px' }}>{s.num}</div>
+              <i className={`ti ${s.icon}`} style={{ fontSize:18, color:'var(--accent)', display:'block', marginBottom:4 }}/>
+              <div style={{ fontSize:12, fontWeight:600 }}>{s.text}</div>
+              <div style={{ fontSize:11, color:'var(--text-tertiary)', marginTop:2 }}>{s.sub}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Transkript */}
+        <div style={card}>
+          <label style={lbl}><i className="ti ti-file-text" style={{ marginRight:4 }}/>Transkript einfügen</label>
+          <textarea
+            value={transcript}
+            onChange={e => setTranscript(e.target.value)}
+            placeholder="Gesprächsprotokoll oder Transkript hier einfügen…&#10;&#10;Beispiel:&#10;Kunde: Ich brauche eine neue Klimaanlage für mein Büro, ca. 30m².&#10;Techniker: Welches Gebäude, Erdgeschoss?&#10;Kunde: Ja, Musterstraße 5, 1010 Wien. Max Muster ist mein Name, rufen Sie mich unter 0664 123456 an."
+            style={{ ...inp, minHeight:220, resize:'vertical', fontFamily:'inherit', lineHeight:1.5 }}
+          />
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginTop:12 }}>
+            <span style={{ fontSize:12, color:'var(--text-tertiary)' }}>
+              {transcript.length > 0 ? `${transcript.length} Zeichen` : 'Mindestens 10 Zeichen erforderlich'}
+            </span>
+            <button
+              className="btn primary"
+              disabled={transcript.trim().length < 10}
+              onClick={analyse}
+              style={{ minWidth:160 }}
+            >
+              <i className="ti ti-sparkles"/> Gespräch analysieren
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── REVIEW ───────────────────────────────────────────────────────────────
+  const tabCount = (id) => {
+    if (id==='positionen') return positionen.length;
+    if (id==='aufgaben')   return aufgaben.length;
+    if (id==='fehlend')    return fehlend.length;
+    return null;
+  };
+
+  return (
+    <div className="page-body">
+      {/* Aktionsleiste */}
+      <div style={{ display:'flex', gap:10, marginBottom:16, alignItems:'center', flexWrap:'wrap' }}>
+        <button className="btn ghost" onClick={() => setStep('input')}>
+          <i className="ti ti-arrow-left"/> Zurück
+        </button>
+        <div style={{ flex:1 }}/>
+        <div style={{ fontSize:13, color:'var(--text-secondary)' }}>
+          <i className="ti ti-sparkles" style={{ color:'var(--accent)', marginRight:5 }}/>
+          KI hat das Gespräch analysiert — bitte überprüfen und ergänzen
+        </div>
+        <button className="btn primary" onClick={anlegen} disabled={saving} style={{ minWidth:160 }}>
+          {saving ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }}/> Wird angelegt…</> : <><i className="ti ti-circle-check"/> Alles anlegen</>}
+        </button>
+      </div>
+
+      {/* Tabs */}
+      <div style={{ display:'flex', gap:4, marginBottom:16, background:'var(--surface)', borderRadius:'var(--radius-lg)', padding:4, border:'1px solid var(--border)', flexWrap:'wrap' }}>
+        {[
+          { id:'kunde',     label:'Kundendaten',  icon:'ti-user' },
+          { id:'positionen',label:'Angebot',       icon:'ti-clipboard' },
+          { id:'aufgaben',  label:'Aufgaben',      icon:'ti-list-check' },
+          { id:'fehlend',   label:'Fehlende Infos',icon:'ti-alert-circle' },
+        ].map(t => (
+          <button key={t.id} style={tabSt(t.id)} onClick={() => setTab(t.id)}>
+            <i className={`ti ${t.icon}`} style={{ marginRight:5 }}/>
+            {t.label}
+            {tabCount(t.id) !== null && tabCount(t.id) > 0 && (
+              <span style={{ marginLeft:6, background: tab===t.id ? 'rgba(255,255,255,0.25)' : 'var(--accent)', color:'#fff', borderRadius:10, fontSize:10, padding:'1px 6px', fontWeight:700 }}>
+                {tabCount(t.id)}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Tab: Kundendaten ── */}
+      {tab === 'kunde' && (
+        <div style={card}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:16, display:'flex', alignItems:'center', gap:8 }}>
+            <i className="ti ti-user" style={{ color:'var(--accent)' }}/>
+            Kundendaten
+            <span style={{ fontSize:12, fontWeight:400, color:'var(--text-tertiary)' }}>— bitte überprüfen und ergänzen</span>
+          </div>
+
+          <div style={{ marginBottom:12 }}>
+            <label style={lbl}>Kundentyp</label>
+            <div style={{ display:'flex', gap:10 }}>
+              {[{v:'business',l:'Firma'},{v:'private',l:'Privatperson'}].map(o => (
+                <label key={o.v} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
+                  <input type="radio" checked={kunde.type===o.v} onChange={() => sk('type', o.v)}/> {o.l}
+                </label>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+            {kunde.type==='business' && (
+              <div style={{ gridColumn:'1/-1' }}>
+                <label style={lbl}>Firmenname</label>
+                <input style={inp} value={kunde.companyName} onChange={e => sk('companyName', e.target.value)} placeholder="GmbH, OG, ..." />
+              </div>
+            )}
+            <div>
+              <label style={lbl}>Vorname</label>
+              <input style={inp} value={kunde.firstName} onChange={e => sk('firstName', e.target.value)} placeholder="Max"/>
+            </div>
+            <div>
+              <label style={lbl}>Nachname</label>
+              <input style={inp} value={kunde.lastName} onChange={e => sk('lastName', e.target.value)} placeholder="Muster"/>
+            </div>
+            <div>
+              <label style={lbl}>E-Mail</label>
+              <input style={inp} type="email" value={kunde.email} onChange={e => sk('email', e.target.value)} placeholder="max@beispiel.at"/>
+            </div>
+            <div>
+              <label style={lbl}>Telefon</label>
+              <input style={inp} value={kunde.phone} onChange={e => sk('phone', e.target.value)} placeholder="0664 ..."/>
+            </div>
+            <div>
+              <label style={lbl}>Straße</label>
+              <input style={inp} value={kunde.street} onChange={e => sk('street', e.target.value)} placeholder="Musterstraße"/>
+            </div>
+            <div>
+              <label style={lbl}>Hausnummer</label>
+              <input style={inp} value={kunde.houseNumber} onChange={e => sk('houseNumber', e.target.value)} placeholder="5"/>
+            </div>
+            <div>
+              <label style={lbl}>PLZ</label>
+              <input style={inp} value={kunde.zip} onChange={e => sk('zip', e.target.value)} placeholder="1010"/>
+            </div>
+            <div>
+              <label style={lbl}>Ort</label>
+              <input style={inp} value={kunde.city} onChange={e => sk('city', e.target.value)} placeholder="Wien"/>
+            </div>
+          </div>
+
+          <div>
+            <label style={lbl}>Projekt / Notizen</label>
+            <textarea style={{ ...inp, minHeight:80, resize:'vertical', fontFamily:'inherit' }}
+              value={[projekt.bezeichnung, projekt.beschreibung, projekt.standort ? `Standort: ${projekt.standort}` : '', kunde.notes].filter(Boolean).join('\n')}
+              onChange={e => sp('beschreibung', e.target.value)}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── Tab: Angebotspositionen ── */}
+      {tab === 'positionen' && (
+        <div style={card}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>
+            <i className="ti ti-clipboard" style={{ color:'var(--accent)' }}/>
+            Angebotspositionen
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:16 }}>
+            Preise können nach dem Anlegen im Angebot ergänzt werden.
+          </div>
+
+          {positionen.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'32px 16px', color:'var(--text-tertiary)' }}>
+              <i className="ti ti-clipboard-off" style={{ fontSize:32, display:'block', marginBottom:8 }}/>
+              Keine Positionen aus dem Gespräch erkannt. Du kannst sie manuell im Angebot hinzufügen.
+            </div>
+          ) : (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 70px 60px 28px', gap:6, padding:'6px 10px', background:'var(--bg)', borderRadius:'var(--radius-md)', fontSize:10, fontWeight:700, color:'var(--text-tertiary)', textTransform:'uppercase', marginBottom:4 }}>
+                <span>Bezeichnung</span><span>Einheit</span><span>Menge</span><span/>
+              </div>
+              {positionen.map((p, i) => (
+                <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 70px 60px 28px', gap:6, padding:'8px 10px', borderBottom:'1px solid var(--border)', alignItems:'center' }}>
+                  <input style={{ ...inp, padding:'5px 8px', fontSize:13 }} value={p.name}
+                    onChange={e => setPositionen(ps => ps.map((x,j) => j===i ? {...x, name:e.target.value} : x))}/>
+                  <input style={{ ...inp, padding:'5px 8px', fontSize:12, textAlign:'center' }} value={p.einheit||'Stk.'}
+                    onChange={e => setPositionen(ps => ps.map((x,j) => j===i ? {...x, einheit:e.target.value} : x))}/>
+                  <input type="number" style={{ ...inp, padding:'5px 8px', fontSize:12, textAlign:'right' }} value={p.menge||1}
+                    onChange={e => setPositionen(ps => ps.map((x,j) => j===i ? {...x, menge:+e.target.value} : x))}/>
+                  <button onClick={() => setPositionen(ps => ps.filter((_,j) => j!==i))}
+                    style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-tertiary)', padding:0, fontSize:14 }}>
+                    <i className="ti ti-trash"/>
+                  </button>
+                </div>
+              ))}
+              <button className="btn ghost" style={{ marginTop:10, fontSize:12 }}
+                onClick={() => setPositionen(ps => [...ps, { name:'Neue Position', einheit:'Stk.', menge:1 }])}>
+                <i className="ti ti-plus"/> Position hinzufügen
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Tab: Aufgaben ── */}
+      {tab === 'aufgaben' && (
+        <div style={card}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>
+            <i className="ti ti-list-check" style={{ color:'var(--accent)' }}/>
+            Aufgaben
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:16 }}>
+            Diese Aufgaben werden automatisch im Workspace angelegt.
+          </div>
+
+          {aufgaben.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'32px 16px', color:'var(--text-tertiary)' }}>
+              <i className="ti ti-list-off" style={{ fontSize:32, display:'block', marginBottom:8 }}/>
+              Keine offenen Aufgaben erkannt.
+            </div>
+          ) : aufgaben.map((a, i) => (
+            <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 100px 28px', gap:8, padding:'8px 0', borderBottom:'1px solid var(--border)', alignItems:'center' }}>
+              <input style={{ ...inp, padding:'5px 8px', fontSize:13 }} value={a.text}
+                onChange={e => setAufgaben(as => as.map((x,j) => j===i ? {...x, text:e.target.value} : x))}/>
+              <select value={a.prioritaet||'mittel'} style={{ ...inp, padding:'5px 8px', fontSize:12 }}
+                onChange={e => setAufgaben(as => as.map((x,j) => j===i ? {...x, prioritaet:e.target.value} : x))}>
+                <option value="hoch">🔴 Hoch</option>
+                <option value="mittel">🟡 Mittel</option>
+                <option value="niedrig">🟢 Niedrig</option>
+              </select>
+              <button onClick={() => setAufgaben(as => as.filter((_,j) => j!==i))}
+                style={{ background:'none', border:'none', cursor:'pointer', color:'var(--text-tertiary)', padding:0, fontSize:14 }}>
+                <i className="ti ti-trash"/>
+              </button>
+            </div>
+          ))}
+          <button className="btn ghost" style={{ marginTop:10, fontSize:12 }}
+            onClick={() => setAufgaben(as => [...as, { text:'Neue Aufgabe', prioritaet:'mittel' }])}>
+            <i className="ti ti-plus"/> Aufgabe hinzufügen
+          </button>
+        </div>
+      )}
+
+      {/* ── Tab: Fehlende Infos ── */}
+      {tab === 'fehlend' && (
+        <div style={card}>
+          <div style={{ fontWeight:700, fontSize:14, marginBottom:4, display:'flex', alignItems:'center', gap:8 }}>
+            <i className="ti ti-alert-circle" style={{ color:'var(--amber)' }}/>
+            Fehlende Informationen
+          </div>
+          <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:16 }}>
+            Diese Infos konnten nicht aus dem Gespräch entnommen werden — bitte hier ergänzen.
+          </div>
+
+          {fehlend.length === 0 ? (
+            <div style={{ textAlign:'center', padding:'32px 16px', color:'var(--green)' }}>
+              <i className="ti ti-circle-check" style={{ fontSize:32, display:'block', marginBottom:8 }}/>
+              <div style={{ fontWeight:600 }}>Alle wichtigen Informationen vorhanden!</div>
+            </div>
+          ) : fehlend.map((f, i) => (
+            <div key={i} style={{ marginBottom:14 }}>
+              <label style={lbl}>
+                <i className="ti ti-question-mark" style={{ marginRight:4, color:'var(--amber)' }}/>
+                {f.label}
+              </label>
+              <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:5 }}>{f.frage}</div>
+              <input style={inp}
+                value={fehlendWerte[f.feld] || ''}
+                onChange={e => setFehlendWerte(v => ({ ...v, [f.feld]: e.target.value }))}
+                placeholder={`${f.label} eingeben…`}
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Anlegen-Button unten */}
+      <div style={{ display:'flex', justifyContent:'flex-end', marginTop:8 }}>
+        <button className="btn primary" onClick={anlegen} disabled={saving} style={{ minWidth:180, padding:'10px 20px' }}>
+          {saving
+            ? <><i className="ti ti-loader-2" style={{ animation:'spin 1s linear infinite' }}/> Wird angelegt…</>
+            : <><i className="ti ti-circle-check"/> Kunde + Angebot anlegen</>}
+        </button>
+      </div>
+    </div>
+  );
+}

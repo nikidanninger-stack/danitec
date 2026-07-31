@@ -15,6 +15,7 @@ const PAGES = [
   { id:'projects',               label:'Planungsprojekte',     icon:'ti-hammer',             section:'Kunden & Einsätze',   roles:['admin','geschaeftsfuehrer','verwaltung','disponent','buchhaltung'], badge:'openTasks' },
   { id:'klima-kalkulation',      label:'Klimamontage Kalkulation', icon:'ti-calculator',     section:'Kunden & Einsätze',   roles:['admin','geschaeftsfuehrer','verwaltung','disponent','montage','techniker','buchhaltung'], highlight: true },
   { id:'kuehlraum-kalkulation',  label:'Kühlraum Kalkulation',     icon:'ti-snowflake',      section:'Kunden & Einsätze',   roles:['admin','geschaeftsfuehrer','verwaltung','disponent','montage','techniker','buchhaltung'], highlight: true },
+  { id:'plaud',                  label:'Plaud Gespräch',           icon:'ti-microphone',     section:'Kunden & Einsätze',   roles:['admin','geschaeftsfuehrer','verwaltung','montage','techniker','disponent'], highlight: true },
 
   // ── Buchhaltung & Belege ──────────────────────────────────────────────────
   { id:'invoices',               label:'Rechnungen',           icon:'ti-file-invoice',       section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'], badge:'overdue' },
