@@ -235,6 +235,8 @@ export const api = {
   supplierLookupByName: (name) => request('POST', '/supplier-extract/lookup-by-name', { name }),
   aiImproveText:  (text, field) => request('POST', '/ai-text', { text, field }),
   plaudAnalyse:   (transcript)  => request('POST', '/plaud-analyse', { transcript }),
+  plaudSecret:    ()            => request('GET',  '/company/plaud-secret'),
+  plaudSecretNew: ()            => request('POST', '/company/plaud-secret'),
 
   // Benutzer (für Techniker-Dropdown)
   users:               ()             => request('GET', '/auth/users'),

@@ -58,6 +58,7 @@ app.use('/api/refrigerant-stock',       require('./routes/refrigerant-stock'));
 app.use('/api/supplier-extract',        require('./routes/supplier-extract'));
 app.use('/api/ai-text',                 require('./routes/ai-text'));
 app.use('/api/plaud-analyse',           require('./routes/plaud-analyse'));
+app.use('/api/plaud-webhook',           require('./routes/plaud-webhook'));
 app.use('/api/drive',                   require('./routes/drive'));
 app.use('/api/calendar',                require('./routes/calendar'));
 app.use('/api/workspace',               require('./routes/workspace'));

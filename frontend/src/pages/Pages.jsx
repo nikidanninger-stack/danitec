@@ -4137,6 +4137,111 @@ function BankingSettings() {
   );
 }
 
+// ─── PLAUD WEBHOOK SETTINGS ───────────────────────────────────────────────────
+function PlaudWebhookSettings() {
+  const [secret, setSecret] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [copied, setCopied] = useState('');
+
+  useEffect(() => {
+    api.plaudSecret().then(r => { setSecret(r.secret); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  const generate = async () => {
+    if (!window.confirm('Neuen Secret-Key generieren? Der alte Zapier-Zap muss dann aktualisiert werden.')) return;
+    setRegenerating(true);
+    try {
+      const r = await api.plaudSecretNew();
+      setSecret(r.secret);
+    } catch(e) { alert(e.message); }
+    setRegenerating(false);
+  };
+
+  const copy = (text, key) => {
+    navigator.clipboard.writeText(text);
+    setCopied(key);
+    setTimeout(() => setCopied(''), 2000);
+  };
+
+  const webhookUrl = `${window.location.origin}/api/plaud-webhook`;
+
+  const fieldStyle = {
+    display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10,
+  };
+  const inputStyle = {
+    flex: 1, fontFamily: 'monospace', fontSize: 12,
+    background: 'var(--bg-card)', border: '1px solid var(--border)',
+    borderRadius: 8, padding: '8px 12px', color: 'var(--text-primary)',
+  };
+
+  return (
+    <div className="card">
+      <div className="card-title"><i className="ti ti-webhook"/>Plaud Vollautomatik (Zapier Webhook)</div>
+      <Alert type="info">
+        Verbinde Plaud mit Zapier: Sobald eine Aufnahme transkribiert ist, schickt Zapier das Transkript automatisch hierher — Danitec legt dann Kunde, Angebot und Aufgaben an, ohne dass du etwas tun musst.
+      </Alert>
+
+      {loading ? <Spinner dark/> : (
+        <>
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Schritt 1 · Webhook-URL (in Zapier eintragen)</div>
+            <div style={fieldStyle}>
+              <input readOnly value={webhookUrl} style={inputStyle}/>
+              <button className="btn sm" onClick={() => copy(webhookUrl, 'url')}>
+                <i className={`ti ${copied==='url' ? 'ti-check' : 'ti-copy'}`}/>
+                {copied==='url' ? 'Kopiert!' : 'Kopieren'}
+              </button>
+            </div>
+          </div>
+
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:12,color:'var(--text-secondary)',marginBottom:6,fontWeight:600}}>Schritt 2 · Secret-Key (als "secret" Feld in Zapier)</div>
+            {secret ? (
+              <div style={fieldStyle}>
+                <input readOnly value={secret} style={{...inputStyle, letterSpacing:'0.05em'}}/>
+                <button className="btn sm" onClick={() => copy(secret, 'secret')}>
+                  <i className={`ti ${copied==='secret' ? 'ti-check' : 'ti-copy'}`}/>
+                  {copied==='secret' ? 'Kopiert!' : 'Kopieren'}
+                </button>
+              </div>
+            ) : (
+              <div style={{color:'var(--text-tertiary)',fontSize:13,marginBottom:8}}>Noch kein Secret generiert.</div>
+            )}
+            <button className="btn sm" onClick={generate} disabled={regenerating}>
+              <i className={`ti ${regenerating ? 'ti-loader-2' : 'ti-refresh'}`}/>
+              {regenerating ? 'Generiere...' : secret ? 'Neu generieren' : 'Secret generieren'}
+            </button>
+          </div>
+
+          <details style={{marginTop:8}}>
+            <summary style={{fontSize:12,color:'var(--text-secondary)',cursor:'pointer',userSelect:'none'}}>
+              <i className="ti ti-info-circle" style={{marginRight:4}}/>Zapier-Einrichtung anzeigen
+            </summary>
+            <div style={{marginTop:12,fontSize:12,color:'var(--text-secondary)',lineHeight:1.7,background:'var(--bg)',borderRadius:8,padding:'12px 14px'}}>
+              <strong>Zapier Zap einrichten:</strong>
+              <ol style={{marginTop:8,paddingLeft:18}}>
+                <li>Trigger: <strong>PLAUD</strong> → <em>Transcript &amp; Summary Ready</em></li>
+                <li>Action: <strong>Webhooks by Zapier</strong> → <em>POST</em></li>
+                <li>URL: die Webhook-URL oben eintragen</li>
+                <li>Payload Type: <strong>JSON</strong></li>
+                <li>Data hinzufügen:
+                  <ul style={{marginTop:4,paddingLeft:16}}>
+                    <li><code>secret</code> → deinen Secret-Key oben</li>
+                    <li><code>transcript</code> → Plaud-Feld: <em>Transcript</em></li>
+                    <li><code>name</code> → Plaud-Feld: <em>Recording Name</em></li>
+                  </ul>
+                </li>
+                <li>Zap aktivieren — fertig! 🎉</li>
+              </ol>
+            </div>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
 // ─── ADMIN DASHBOARD ──────────────────────────────────────────────────────────
 export function AdminDashboard() {
   const { data, loading, reload } = useData(() => api.company());
@@ -4363,12 +4468,15 @@ export function AdminDashboard() {
 
       {/* ── KI-Einstellungen ── */}
       <div className="card">
-        <div className="card-title"><i className="ti ti-robot"/>KI-Einstellungen (Foto-Erkennung)</div>
-        <Alert type="info">Der OpenAI API-Key wird für die automatische Erkennung von Eingangsrechnungen per Foto verwendet. Du findest deinen Key unter <strong>platform.openai.com/api-keys</strong>.</Alert>
+        <div className="card-title"><i className="ti ti-robot"/>KI-Einstellungen (Foto-Erkennung & Plaud)</div>
+        <Alert type="info">Der OpenAI API-Key wird für die automatische Erkennung von Eingangsrechnungen per Foto und für die Plaud-Gesprächsanalyse verwendet. Du findest deinen Key unter <strong>platform.openai.com/api-keys</strong>.</Alert>
         <FormGroup label="OpenAI API-Key">
           <input type="password" value={st?.openai_api_key||''} onChange={e=>setSt(s=>({...s,openai_api_key:e.target.value}))} placeholder="sk-..." autoComplete="off"/>
         </FormGroup>
       </div>
+
+      {/* ── Plaud Webhook (Zapier) ── */}
+      <PlaudWebhookSettings/>
 
       {/* ── E-Mail / SMTP ── */}
       <SmtpSettings st={st} setSt={setSt}/>

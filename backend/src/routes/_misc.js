@@ -200,4 +200,24 @@ cRouter.delete('/letterhead', authz('admin','geschaeftsfuehrer'), async (req,res
   } catch(err) { next(err); }
 });
 
+// ── Plaud Webhook Secret ──────────────────────────────────────────────────────
+// GET  /api/company/plaud-secret  → gibt aktuelles Secret zurück
+// POST /api/company/plaud-secret  → generiert neues Secret
+const crypto = require('crypto');
+
+cRouter.get('/plaud-secret', authz('admin','geschaeftsfuehrer'), async (req,res,next) => {
+  try {
+    const r = await q('SELECT plaud_webhook_secret FROM company_settings WHERE company_id=$1',[req.user.company_id]);
+    res.json({ secret: r.rows[0]?.plaud_webhook_secret || null });
+  } catch(err) { next(err); }
+});
+
+cRouter.post('/plaud-secret', authz('admin','geschaeftsfuehrer'), async (req,res,next) => {
+  try {
+    const secret = crypto.randomBytes(32).toString('hex');
+    await q('UPDATE company_settings SET plaud_webhook_secret=$1 WHERE company_id=$2',[secret, req.user.company_id]);
+    res.json({ secret });
+  } catch(err) { next(err); }
+});
+
 module.exports = { payments: pRouter, company: cRouter };
