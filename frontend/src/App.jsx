@@ -11,6 +11,7 @@ import {
   Projects, Equipment, ServiceReports, MaintenanceContracts,
   FGasLog, TimeTracking, GoogleDrivePage, CalendarPage, WorkspacePage,
   PlaudImport,
+  Kassabuch,
 } from './pages/Pages';
 import { api } from './api/client';
 import KlimaKalkulation from './pages/KlimaKalkulation';
@@ -52,6 +53,7 @@ const PAGE_META = {
   'klima-kalkulation':     { title: 'Klimamontage Kalkulation', icon: 'ti-calculator' },
   'kuehlraum-kalkulation': { title: 'Kühlraum Kalkulation',     icon: 'ti-snowflake'  },
   plaud:                   { title: 'Plaud Kundengespräch',      icon: 'ti-microphone' },
+  kassabuch:               { title: 'Kassabuch',                 icon: 'ti-cash' },
 };
 
 const PAGE_COMPONENTS = {
@@ -85,6 +87,7 @@ const PAGE_COMPONENTS = {
   'klima-kalkulation':     KlimaKalkulation,
   'kuehlraum-kalkulation': KuehlraumKalkulation,
   plaud:                   PlaudImport,
+  kassabuch:               Kassabuch,
 };
 
 // ─── App Shell (nach Login) ───────────────────────────────────────────────────

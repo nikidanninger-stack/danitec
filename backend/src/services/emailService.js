@@ -144,8 +144,49 @@ ${company.name}
 ${company.email || ''}`;
 }
 
+// ─── Interne Benachrichtigung (Plaud, Follow-up etc.) ─────────────────────────
+async function sendInternalNotification({ companyId, toEmail, subject, lines }) {
+  try {
+    const { transporter, fromEmail, fromName } = await createTransporter(companyId);
+    if (!fromEmail) return; // Kein SMTP konfiguriert → still überspringen
+
+    const html = `<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8">
+<style>body{font-family:Arial,sans-serif;font-size:14px;color:#1a1a18;line-height:1.7;margin:0;padding:0}
+.wrap{max-width:560px;margin:0 auto;padding:20px}
+.header{background:#185fa5;color:white;padding:16px 20px;border-radius:8px 8px 0 0;font-size:16px;font-weight:bold}
+.body{background:#fff;border:1px solid #e0e0e0;border-top:none;padding:20px 24px;border-radius:0 0 8px 8px}
+.row{padding:6px 0;border-bottom:1px solid #f0f0f0}.row:last-child{border:none}
+.label{color:#888;font-size:12px;text-transform:uppercase;letter-spacing:.05em}
+.value{font-weight:600;font-size:14px}
+.footer{color:#aaa;font-size:11px;margin-top:12px;text-align:center}
+</style></head>
+<body><div class="wrap">
+  <div class="header">🎙️ Danitec – ${subject}</div>
+  <div class="body">
+    ${lines.map(l => l.divider
+      ? `<div style="border-top:2px solid #e0e0e0;margin:12px 0"></div>`
+      : `<div class="row"><div class="label">${l.label}</div><div class="value">${l.value || '—'}</div></div>`
+    ).join('')}
+  </div>
+  <div class="footer">Danitec App · automatische Benachrichtigung</div>
+</div></body></html>`;
+
+    await transporter.sendMail({
+      from: `"${fromName || 'Danitec'}" <${fromEmail}>`,
+      to:   toEmail,
+      subject,
+      html,
+    });
+    logger.info(`Interne Benachrichtigung versendet: ${subject}`);
+  } catch (err) {
+    logger.error(`Interne Benachrichtigung fehlgeschlagen: ${err.message}`);
+    // Nicht weiterwerfen — Benachrichtigung ist nice-to-have
+  }
+}
+
 module.exports = {
   sendInvoiceEmail,
+  sendInternalNotification,
   verifyConnection,
   getDefaultInvoiceEmailText,
   getDefaultOfferEmailText,

@@ -238,6 +238,15 @@ export const api = {
   plaudSecret:    ()            => request('GET',  '/company/plaud-secret'),
   plaudSecretNew: ()            => request('POST', '/company/plaud-secret'),
 
+  // Backup
+  backupRun:      ()            => request('POST', '/backup/run'),
+  backupStatus:   ()            => request('GET',  '/backup/status'),
+
+  // Kassabuch
+  kassabuch:        (p={})      => request('GET',  '/kassabuch', null, p),
+  createKassaeintrag:(body)     => request('POST', '/kassabuch', body),
+  deleteKassaeintrag:(id)       => request('DELETE', `/kassabuch/${id}`),
+
   // Benutzer (für Techniker-Dropdown)
   users:               ()             => request('GET', '/auth/users'),
 

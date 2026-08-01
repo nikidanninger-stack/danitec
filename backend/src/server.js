@@ -60,6 +60,9 @@ app.use('/api/ai-text',                 require('./routes/ai-text'));
 app.use('/api/plaud-analyse',           require('./routes/plaud-analyse'));
 app.use('/api/plaud-webhook',           require('./routes/plaud-webhook'));
 app.use('/api/drive',                   require('./routes/drive'));
+app.use('/api/backup',                  require('./routes/backup'));
+app.use('/api/followup',                require('./routes/followup'));
+app.use('/api/kassabuch',               require('./routes/kassabuch'));
 app.use('/api/calendar',                require('./routes/calendar'));
 app.use('/api/workspace',               require('./routes/workspace'));
 
@@ -104,7 +107,28 @@ app.listen(PORT, () => {
   logger.info(`Danitec Backend läuft auf Port ${PORT} (${process.env.NODE_ENV})`);
   // Migrationen asynchron im Hintergrund ausführen
   runMigrations().catch(err => logger.error('Migrations-Fehler: ' + err.message));
+  scheduleDailyJobs();
 });
+
+// ─── Tägliche Jobs ────────────────────────────────────────────────────────────
+function scheduleDailyJobs() {
+  const { runFollowups } = require('./routes/followup');
+  // Jeden Tag um 09:00 UTC (= 10:00 oder 11:00 österreichischer Zeit)
+  const now = new Date();
+  const next9 = new Date();
+  next9.setUTCHours(9, 0, 0, 0);
+  if (next9 <= now) next9.setUTCDate(next9.getUTCDate() + 1);
+  const msUntil = next9 - now;
+
+  setTimeout(() => {
+    runFollowups().catch(e => logger.error('Follow-up Job: ' + e.message));
+    setInterval(() => {
+      runFollowups().catch(e => logger.error('Follow-up Job: ' + e.message));
+    }, 24 * 60 * 60 * 1000);
+  }, msUntil);
+
+  logger.info(`Follow-up Job startet in ${Math.round(msUntil / 60000)} Minuten`);
+}
 
 async function runMigrations() {
   try {

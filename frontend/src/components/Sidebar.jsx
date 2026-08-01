@@ -18,6 +18,7 @@ const PAGES = [
   { id:'plaud',                  label:'Plaud Gespräch',           icon:'ti-microphone',     section:'Kunden & Einsätze',   roles:['admin','geschaeftsfuehrer','verwaltung','montage','techniker','disponent'], highlight: true },
 
   // ── Buchhaltung & Belege ──────────────────────────────────────────────────
+  { id:'kassabuch',              label:'Kassabuch',            icon:'ti-cash',               section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','verwaltung'] },
   { id:'invoices',               label:'Rechnungen',           icon:'ti-file-invoice',       section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'], badge:'overdue' },
   { id:'offers',                 label:'Angebote',             icon:'ti-clipboard',          section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'] },
   { id:'expenses',               label:'Ausgaben',             icon:'ti-receipt-2',          section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'] },

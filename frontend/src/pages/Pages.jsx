@@ -4137,6 +4137,71 @@ function BankingSettings() {
   );
 }
 
+// ─── BACKUP SETTINGS ──────────────────────────────────────────────────────────
+function BackupSettings() {
+  const [status, setStatus] = useState(null);
+  const [running, setRunning] = useState(false);
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    api.backupStatus().then(setStatus).catch(() => {});
+  }, []);
+
+  const runBackup = async () => {
+    setRunning(true);
+    setResult(null);
+    try {
+      const r = await api.backupRun();
+      setResult({ ok: true, msg: r.message, records: r.records, size: r.size_kb });
+      api.backupStatus().then(setStatus).catch(() => {});
+    } catch(e) {
+      setResult({ ok: false, msg: e.message });
+    }
+    setRunning(false);
+  };
+
+  const fmt = (iso) => iso ? new Date(iso).toLocaleDateString('de-AT', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' }) : '—';
+
+  return (
+    <div className="card">
+      <div className="card-title"><i className="ti ti-database-export"/>Daten-Backup (Google Drive)</div>
+      <Alert type="info">
+        Alle Kundendaten, Angebote, Rechnungen und mehr werden täglich automatisch als JSON-Datei in deinen Google Drive gesichert (Ordner: "Danitec Backup"). Backups werden 30 Tage aufbewahrt.
+      </Alert>
+
+      {status && (
+        <div style={{display:'flex',alignItems:'center',gap:12,padding:'12px 14px',borderRadius:8,background:'var(--bg)',marginBottom:12,fontSize:13}}>
+          <i className={`ti ${status.connected ? 'ti-circle-check' : 'ti-alert-circle'}`}
+             style={{color: status.connected ? 'var(--green)' : 'var(--red)', fontSize:20}}/>
+          <div>
+            {status.connected ? (
+              <>
+                <div style={{fontWeight:600}}>Google Drive verbunden</div>
+                <div style={{color:'var(--text-secondary)',fontSize:12}}>
+                  Letztes Backup: {status.lastBackup ? `${fmt(status.lastBackup.date)} · ${status.lastBackup.size_kb} KB` : 'Noch keines'}
+                </div>
+              </>
+            ) : (
+              <div style={{color:'var(--red)'}}>Google Drive nicht verbunden — bitte zuerst unter Google Drive verbinden</div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <Alert type={result.ok ? 'success' : 'error'} style={{marginBottom:12}}>
+          {result.ok ? <><strong>✅ Backup erfolgreich!</strong> {result.records} Datensätze · {result.size} KB · {result.msg}</> : result.msg}
+        </Alert>
+      )}
+
+      <button className="btn primary sm" onClick={runBackup} disabled={running || !status?.connected}>
+        <i className={`ti ${running ? 'ti-loader-2' : 'ti-cloud-upload'}`}/>
+        {running ? 'Backup läuft...' : 'Jetzt Backup erstellen'}
+      </button>
+    </div>
+  );
+}
+
 // ─── PLAUD WEBHOOK SETTINGS ───────────────────────────────────────────────────
 function PlaudWebhookSettings() {
   const [secret, setSecret] = useState(null);
@@ -4474,6 +4539,9 @@ export function AdminDashboard() {
           <input type="password" value={st?.openai_api_key||''} onChange={e=>setSt(s=>({...s,openai_api_key:e.target.value}))} placeholder="sk-..." autoComplete="off"/>
         </FormGroup>
       </div>
+
+      {/* ── Backup ── */}
+      <BackupSettings/>
 
       {/* ── Plaud Webhook (Zapier) ── */}
       <PlaudWebhookSettings/>
@@ -6949,6 +7017,136 @@ function IncomingInvoicesInner() {
 }
 
 // ─── PLAUD: Kundengespräch → Kunde + Angebot + Aufgaben anlegen ───────────────
+// ─── KASSABUCH ────────────────────────────────────────────────────────────────
+export function Kassabuch() {
+  const today = new Date().toISOString().slice(0,10);
+  const firstOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10);
+  const [von, setVon] = useState(firstOfMonth);
+  const [bis, setBis] = useState(today);
+  const { data, loading, reload } = useData(() => api.kassabuch({ von, bis }), [von, bis]);
+  const [form, setForm] = useState({ datum: today, typ: 'einnahme', betrag: '', beschreibung: '', belegNr: '', kunde: '' });
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    if (!form.betrag || !form.beschreibung) return alert('Betrag und Beschreibung erforderlich.');
+    setSaving(true);
+    try {
+      await api.createKassaeintrag(form);
+      setForm({ datum: today, typ: 'einnahme', betrag: '', beschreibung: '', belegNr: '', kunde: '' });
+      reload();
+    } catch(e) { alert(e.message); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    if (!window.confirm('Eintrag löschen?')) return;
+    await api.deleteKassaeintrag(id);
+    reload();
+  };
+
+  const fmtEur = (n) => new Intl.NumberFormat('de-AT', { style:'currency', currency:'EUR' }).format(parseFloat(n)||0);
+  const fmtDate = (d) => d ? new Date(d).toLocaleDateString('de-AT') : '—';
+
+  const einnahmen = data?.einnahmen || 0;
+  const ausgaben  = data?.ausgaben  || 0;
+  const saldo     = data?.saldo     || 0;
+
+  return (
+    <div className="page-body">
+      {/* Neuer Eintrag */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="card-title"><i className="ti ti-cash"/>Neuer Kasseneintrag</div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))',gap:10,marginBottom:10}}>
+          <FormGroup label="Datum"><input type="date" value={form.datum} onChange={e=>setForm(f=>({...f,datum:e.target.value}))}/></FormGroup>
+          <FormGroup label="Typ">
+            <select value={form.typ} onChange={e=>setForm(f=>({...f,typ:e.target.value}))}>
+              <option value="einnahme">💰 Einnahme</option>
+              <option value="ausgabe">💸 Ausgabe</option>
+            </select>
+          </FormGroup>
+          <FormGroup label="Betrag (€)"><input type="number" step="0.01" min="0" value={form.betrag} onChange={e=>setForm(f=>({...f,betrag:e.target.value}))} placeholder="0,00"/></FormGroup>
+          <FormGroup label="Belegnr."><input type="text" value={form.belegNr} onChange={e=>setForm(f=>({...f,belegNr:e.target.value}))} placeholder="z.B. KA-001"/></FormGroup>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:12}}>
+          <FormGroup label="Beschreibung"><input type="text" value={form.beschreibung} onChange={e=>setForm(f=>({...f,beschreibung:e.target.value}))} placeholder="z.B. Barrechnung Klimaanlage Mustermann"/></FormGroup>
+          <FormGroup label="Kunde (optional)"><input type="text" value={form.kunde} onChange={e=>setForm(f=>({...f,kunde:e.target.value}))} placeholder="z.B. Max Mustermann"/></FormGroup>
+        </div>
+        <button className="btn primary" onClick={save} disabled={saving}>
+          <i className={`ti ${saving ? 'ti-loader-2' : 'ti-plus'}`}/>{saving ? 'Speichern...' : 'Eintrag hinzufügen'}
+        </button>
+      </div>
+
+      {/* Filter + Summen */}
+      <div style={{display:'flex',gap:12,alignItems:'center',flexWrap:'wrap',marginBottom:16}}>
+        <div style={{display:'flex',gap:8,alignItems:'center'}}>
+          <label style={{fontSize:12,color:'var(--text-secondary)'}}>Von</label>
+          <input type="date" value={von} onChange={e=>setVon(e.target.value)} style={{fontSize:12}}/>
+          <label style={{fontSize:12,color:'var(--text-secondary)'}}>Bis</label>
+          <input type="date" value={bis} onChange={e=>setBis(e.target.value)} style={{fontSize:12}}/>
+        </div>
+        <div style={{display:'flex',gap:12,marginLeft:'auto',flexWrap:'wrap'}}>
+          <div style={{background:'rgba(74,222,128,0.1)',border:'1px solid rgba(74,222,128,0.3)',borderRadius:8,padding:'6px 14px',fontSize:13}}>
+            <span style={{color:'var(--text-secondary)'}}>Einnahmen: </span><strong style={{color:'var(--green)'}}>{fmtEur(einnahmen)}</strong>
+          </div>
+          <div style={{background:'rgba(239,68,68,0.08)',border:'1px solid rgba(239,68,68,0.2)',borderRadius:8,padding:'6px 14px',fontSize:13}}>
+            <span style={{color:'var(--text-secondary)'}}>Ausgaben: </span><strong style={{color:'var(--red)'}}>{fmtEur(ausgaben)}</strong>
+          </div>
+          <div style={{background:'var(--bg-card)',border:'1px solid var(--border)',borderRadius:8,padding:'6px 14px',fontSize:13}}>
+            <span style={{color:'var(--text-secondary)'}}>Saldo: </span><strong style={{color: saldo>=0 ? 'var(--green)' : 'var(--red)'}}>{fmtEur(saldo)}</strong>
+          </div>
+        </div>
+      </div>
+
+      {/* Tabelle */}
+      {loading ? <Spinner dark/> : (
+        <div className="card" style={{padding:0,overflow:'hidden'}}>
+          {(!data?.data || data.data.length === 0) ? (
+            <div style={{padding:32,textAlign:'center',color:'var(--text-tertiary)'}}>
+              <i className="ti ti-cash" style={{fontSize:32,display:'block',marginBottom:8}}/>
+              Noch keine Einträge für diesen Zeitraum.
+            </div>
+          ) : (
+            <table style={{width:'100%',borderCollapse:'collapse',fontSize:13}}>
+              <thead>
+                <tr style={{background:'var(--bg)',borderBottom:'2px solid var(--border)'}}>
+                  {['Datum','Typ','Beschreibung','Kunde','Beleg','Betrag',''].map(h => (
+                    <th key={h} style={{padding:'10px 12px',textAlign:'left',fontWeight:600,fontSize:11,color:'var(--text-secondary)',textTransform:'uppercase'}}>{h}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {data.data.map(e => (
+                  <tr key={e.id} style={{borderBottom:'1px solid var(--border)'}}>
+                    <td style={{padding:'10px 12px',whiteSpace:'nowrap'}}>{fmtDate(e.datum)}</td>
+                    <td style={{padding:'10px 12px'}}>
+                      <span style={{padding:'2px 8px',borderRadius:12,fontSize:11,fontWeight:600,
+                        background: e.typ==='einnahme' ? 'rgba(74,222,128,0.12)' : 'rgba(239,68,68,0.1)',
+                        color: e.typ==='einnahme' ? 'var(--green)' : 'var(--red)'}}>
+                        {e.typ==='einnahme' ? '💰 Einnahme' : '💸 Ausgabe'}
+                      </span>
+                    </td>
+                    <td style={{padding:'10px 12px'}}>{e.beschreibung}</td>
+                    <td style={{padding:'10px 12px',color:'var(--text-secondary)'}}>{e.kunde||'—'}</td>
+                    <td style={{padding:'10px 12px',color:'var(--text-tertiary)',fontFamily:'monospace',fontSize:11}}>{e.beleg_nr||'—'}</td>
+                    <td style={{padding:'10px 12px',fontWeight:700,color: e.typ==='einnahme' ? 'var(--green)' : 'var(--red)',whiteSpace:'nowrap'}}>
+                      {e.typ==='ausgabe' ? '−' : '+'}{fmtEur(e.betrag)}
+                    </td>
+                    <td style={{padding:'10px 8px'}}>
+                      <button className="btn danger sm icon" onClick={()=>del(e.id)} title="Löschen">
+                        <i className="ti ti-trash"/>
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function PlaudImport({ onNavigate }) {
   const [step,        setStep]        = React.useState('input');   // input|loading|review|done
   const [transcript,  setTranscript]  = React.useState('');
