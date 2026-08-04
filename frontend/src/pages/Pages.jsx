@@ -7017,6 +7017,152 @@ function IncomingInvoicesInner() {
 }
 
 // ─── PLAUD: Kundengespräch → Kunde + Angebot + Aufgaben anlegen ───────────────
+// ─── GRÜNDUNGSKOSTEN ──────────────────────────────────────────────────────────
+export function Gruendungskosten() {
+  const today = new Date().toISOString().slice(0,10);
+  const PERSONEN = ['Niklas', 'Jonas'];
+  const KATEGORIEN = ['Werkzeug & Ausrüstung', 'Fahrzeug', 'Büro & IT', 'Behörden & Lizenzen', 'Marketing', 'Schulung', 'Sonstiges'];
+
+  const [data, setData]       = useState([]);
+  const [summary, setSummary] = useState({});
+  const [gesamt, setGesamt]   = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm]       = useState({ datum: today, beschreibung: '', betrag: '', bezahlt_von: 'Niklas', kategorie: '', beleg_nr: '' });
+  const [saving, setSaving]   = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.gruendungskosten();
+      setData(r.data || []);
+      setSummary(r.summary || {});
+      setGesamt(r.gesamt || 0);
+    } catch(e) { console.error(e); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, []);
+
+  const save = async (e) => {
+    e.preventDefault();
+    if (!form.beschreibung || !form.betrag) return;
+    setSaving(true);
+    try {
+      await api.createGruendungskosten(form);
+      setForm({ datum: today, beschreibung: '', betrag: '', bezahlt_von: 'Niklas', kategorie: '', beleg_nr: '' });
+      await load();
+    } catch(e) { alert('Fehler: ' + e.message); }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    if (!confirm('Eintrag löschen?')) return;
+    await api.deleteGruendungskosten(id);
+    load();
+  };
+
+  const fmt = (n) => parseFloat(n || 0).toLocaleString('de-AT', { style:'currency', currency:'EUR' });
+
+  const FARBEN = { 'Niklas': 'var(--accent)', 'Jonas': '#10b981' };
+
+  return (
+    <div style={{ maxWidth: 900, margin: '0 auto', padding: '0 16px 40px' }}>
+
+      {/* Zusammenfassung pro Person */}
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:12, marginBottom:24 }}>
+        {PERSONEN.map(p => (
+          <div key={p} style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'16px 20px', borderTop:`3px solid ${FARBEN[p] || 'var(--accent)'}` }}>
+            <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:4 }}>{p}</div>
+            <div style={{ fontSize:22, fontWeight:700, color:'var(--text-primary)' }}>{fmt(summary[p] || 0)}</div>
+          </div>
+        ))}
+        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:'16px 20px', borderTop:'3px solid #f59e0b' }}>
+          <div style={{ fontSize:12, color:'var(--text-secondary)', marginBottom:4 }}>Gesamt</div>
+          <div style={{ fontSize:22, fontWeight:700, color:'var(--text-primary)' }}>{fmt(gesamt)}</div>
+        </div>
+      </div>
+
+      {/* Formular */}
+      <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, padding:20, marginBottom:24 }}>
+        <h3 style={{ margin:'0 0 16px', fontSize:14, color:'var(--text-primary)' }}>Neue Ausgabe eintragen</h3>
+        <form onSubmit={save}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(160px,1fr))', gap:12, marginBottom:12 }}>
+            <div>
+              <label style={{ fontSize:12, color:'var(--text-secondary)', display:'block', marginBottom:4 }}>Datum</label>
+              <input type="date" value={form.datum} onChange={e=>setForm(f=>({...f,datum:e.target.value}))} className="form-input" required />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:'var(--text-secondary)', display:'block', marginBottom:4 }}>Bezahlt von</label>
+              <select value={form.bezahlt_von} onChange={e=>setForm(f=>({...f,bezahlt_von:e.target.value}))} className="form-input">
+                {PERSONEN.map(p => <option key={p} value={p}>{p}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:'var(--text-secondary)', display:'block', marginBottom:4 }}>Betrag (€)</label>
+              <input type="number" step="0.01" min="0" value={form.betrag} onChange={e=>setForm(f=>({...f,betrag:e.target.value}))} className="form-input" placeholder="0,00" required />
+            </div>
+            <div>
+              <label style={{ fontSize:12, color:'var(--text-secondary)', display:'block', marginBottom:4 }}>Kategorie</label>
+              <select value={form.kategorie} onChange={e=>setForm(f=>({...f,kategorie:e.target.value}))} className="form-input">
+                <option value="">— wählen —</option>
+                {KATEGORIEN.map(k => <option key={k} value={k}>{k}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr auto', gap:12, alignItems:'end' }}>
+            <div>
+              <label style={{ fontSize:12, color:'var(--text-secondary)', display:'block', marginBottom:4 }}>Beschreibung</label>
+              <input value={form.beschreibung} onChange={e=>setForm(f=>({...f,beschreibung:e.target.value}))} className="form-input" placeholder="z.B. Werkzeugkauf Baumarkt" required />
+            </div>
+            <button type="submit" className="btn btn-primary" disabled={saving} style={{ whiteSpace:'nowrap' }}>
+              {saving ? 'Speichern...' : '+ Eintragen'}
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* Tabelle */}
+      {loading ? (
+        <div style={{ textAlign:'center', color:'var(--text-secondary)', padding:40 }}>Laden...</div>
+      ) : data.length === 0 ? (
+        <div style={{ textAlign:'center', color:'var(--text-secondary)', padding:40 }}>Noch keine Ausgaben eingetragen.</div>
+      ) : (
+        <div style={{ background:'var(--card)', border:'1px solid var(--border)', borderRadius:10, overflow:'hidden' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:13 }}>
+            <thead>
+              <tr style={{ background:'var(--bg)', borderBottom:'1px solid var(--border)' }}>
+                {['Datum','Bezahlt von','Beschreibung','Kategorie','Betrag',''].map(h => (
+                  <th key={h} style={{ padding:'10px 14px', textAlign:'left', fontSize:11, color:'var(--text-secondary)', fontWeight:600 }}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.map((e, i) => (
+                <tr key={e.id} style={{ borderBottom: i < data.length-1 ? '1px solid var(--border)' : 'none' }}>
+                  <td style={{ padding:'10px 14px', color:'var(--text-secondary)', whiteSpace:'nowrap' }}>{e.datum?.slice(0,10)}</td>
+                  <td style={{ padding:'10px 14px' }}>
+                    <span style={{ background: FARBEN[e.bezahlt_von] ? FARBEN[e.bezahlt_von]+'22' : 'var(--bg)', color: FARBEN[e.bezahlt_von] || 'var(--text-primary)', borderRadius:12, padding:'2px 10px', fontSize:12, fontWeight:600 }}>
+                      {e.bezahlt_von}
+                    </span>
+                  </td>
+                  <td style={{ padding:'10px 14px', color:'var(--text-primary)' }}>{e.beschreibung}</td>
+                  <td style={{ padding:'10px 14px', color:'var(--text-secondary)', fontSize:12 }}>{e.kategorie || '—'}</td>
+                  <td style={{ padding:'10px 14px', color:'var(--text-primary)', fontWeight:600, whiteSpace:'nowrap' }}>{fmt(e.betrag)}</td>
+                  <td style={{ padding:'10px 14px' }}>
+                    <button onClick={() => del(e.id)} style={{ background:'none', border:'none', color:'var(--text-tertiary)', cursor:'pointer', fontSize:16 }}>
+                      <i className="ti ti-trash" />
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── KASSABUCH ────────────────────────────────────────────────────────────────
 export function Kassabuch() {
   const today = new Date().toISOString().slice(0,10);

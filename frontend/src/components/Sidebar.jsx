@@ -19,6 +19,7 @@ const PAGES = [
 
   // ── Buchhaltung & Belege ──────────────────────────────────────────────────
   { id:'kassabuch',              label:'Kassabuch',            icon:'ti-cash',               section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','verwaltung'] },
+  { id:'gruendungskosten',       label:'Vor Gründung',         icon:'ti-coins',              section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer'] },
   { id:'invoices',               label:'Rechnungen',           icon:'ti-file-invoice',       section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'], badge:'overdue' },
   { id:'offers',                 label:'Angebote',             icon:'ti-clipboard',          section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'] },
   { id:'expenses',               label:'Ausgaben',             icon:'ti-receipt-2',          section:'Buchhaltung & Belege', roles:['admin','geschaeftsfuehrer','buchhaltung','verwaltung'] },

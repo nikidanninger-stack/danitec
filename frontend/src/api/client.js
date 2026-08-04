@@ -247,6 +247,10 @@ export const api = {
   createKassaeintrag:(body)     => request('POST', '/kassabuch', body),
   deleteKassaeintrag:(id)       => request('DELETE', `/kassabuch/${id}`),
 
+  gruendungskosten:       ()     => request('GET',    '/gruendungskosten'),
+  createGruendungskosten: (body) => request('POST',   '/gruendungskosten', body),
+  deleteGruendungskosten: (id)   => request('DELETE', `/gruendungskosten/${id}`),
+
   // Benutzer (für Techniker-Dropdown)
   users:               ()             => request('GET', '/auth/users'),
 

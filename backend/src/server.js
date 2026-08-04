@@ -63,6 +63,7 @@ app.use('/api/drive',                   require('./routes/drive'));
 app.use('/api/backup',                  require('./routes/backup'));
 app.use('/api/followup',                require('./routes/followup'));
 app.use('/api/kassabuch',               require('./routes/kassabuch'));
+app.use('/api/gruendungskosten',        require('./routes/gruendungskosten'));
 app.use('/api/calendar',                require('./routes/calendar'));
 app.use('/api/workspace',               require('./routes/workspace'));
 
