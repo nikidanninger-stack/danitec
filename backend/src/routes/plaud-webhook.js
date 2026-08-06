@@ -175,25 +175,65 @@ async function processKundengespraech({ company_id, openai_api_key, transcript, 
     logger.info(`Plaud: Kunde angelegt (ID ${customerId})`);
   }
 
-  // Angebot anlegen
+  // Angebot anlegen (korrekte Tabellen: documents + offer_details + document_items)
+  let offerId = null;
   if (customerId) {
-    const today = new Date().toISOString().slice(0, 10);
-    const validUntil = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
-    const offerRes = await query(
-      `INSERT INTO offers (company_id, customer_id, document_date, valid_until, subject, net_total, vat_total, gross_total, status)
-       VALUES ($1,$2,$3,$4,$5,0,0,0,'draft') RETURNING id`,
-      [company_id, customerId, today, validUntil, projekt.bezeichnung || recordingName]
-    );
-    const offerId = offerRes.rows[0].id;
-    for (let i = 0; i < positionen.length; i++) {
-      const pos = positionen[i];
-      await query(
-        `INSERT INTO offer_positions (offer_id, position_number, description, quantity, unit, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount)
-         VALUES ($1,$2,$3,$4,$5,0,20,0,0,0)`,
-        [offerId, i + 1, pos.name, pos.menge || 1, pos.einheit || 'Stk.']
+    const { pool } = require('../utils/db');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // Angebotsnummer generieren
+      const sq = await client.query(
+        'SELECT offer_prefix, next_offer_seq FROM company_settings WHERE company_id=$1 FOR UPDATE',
+        [company_id]
       );
+      const prefix = sq.rows[0]?.offer_prefix || 'AN';
+      const seq    = sq.rows[0]?.next_offer_seq || 1;
+      const year   = new Date().getFullYear();
+      const offerNumber = `${prefix}-${year}-${String(seq).padStart(4, '0')}`;
+      await client.query('UPDATE company_settings SET next_offer_seq=next_offer_seq+1 WHERE company_id=$1', [company_id]);
+
+      // A-Nummer (Auftragsnummer)
+      const seqA = await client.query(
+        `SELECT COALESCE(MAX(CAST(NULLIF(regexp_replace(order_number,'[^0-9]','','g'),'') AS INT)),0)+1 AS next FROM documents WHERE company_id=$1 AND order_number LIKE 'A-%'`,
+        [company_id]
+      );
+      const orderNumber = `A-${String(seqA.rows[0]?.next || 1).padStart(4, '0')}`;
+
+      const today      = new Date().toISOString().slice(0, 10);
+      const validUntil = new Date(Date.now() + 30 * 864e5).toISOString().slice(0, 10);
+      const subject    = projekt.bezeichnung || recordingName;
+
+      const docRes = await client.query(
+        `INSERT INTO documents (company_id, type, number, order_number, status, customer_id, document_date, due_date, subject, net_total, vat_total, gross_total)
+         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,0,0,0) RETURNING id`,
+        [company_id, offerNumber, orderNumber, customerId, today, validUntil, subject]
+      );
+      offerId = docRes.rows[0].id;
+
+      await client.query(
+        'INSERT INTO offer_details (document_id, offer_status, valid_until) VALUES ($1,$2,$3)',
+        [offerId, 'draft', validUntil]
+      );
+
+      for (let i = 0; i < positionen.length; i++) {
+        const pos = positionen[i];
+        await client.query(
+          `INSERT INTO document_items (document_id, position_number, description, quantity, unit, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount)
+           VALUES ($1,$2,$3,$4,$5,0,20,0,0,0)`,
+          [offerId, i + 1, pos.name, pos.menge || 1, pos.einheit || 'Stk.']
+        );
+      }
+
+      await client.query('COMMIT');
+      logger.info(`Plaud: Angebot ${offerNumber} angelegt (ID ${offerId}) mit ${positionen.length} Positionen`);
+    } catch (e) {
+      await client.query('ROLLBACK');
+      logger.error('Plaud: Angebot anlegen fehlgeschlagen: ' + e.message);
+    } finally {
+      client.release();
     }
-    logger.info(`Plaud: Angebot angelegt (ID ${offerId}) mit ${positionen.length} Positionen`);
   }
 
   // Tasks im Board "Plaud Aufgaben"
