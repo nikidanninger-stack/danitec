@@ -741,6 +741,12 @@ export function Offers() {
   const [analyseData, setAnalyseData] = useState(null);
   const [analyseLoading, setAnalyseLoading] = useState(false);
   const [analyseOffer, setAnalyseOffer] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);
+  const [editOffer, setEditOffer] = useState(null);
+  const [editPositions, setEditPositions] = useState([]);
+  const [editSubject, setEditSubject] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [editSaving, setEditSaving] = useState(false);
   const { data, loading, reload } = useData(() => api.offers());
   const { data: customers } = useData(() => api.customers());
   const { data: products  } = useData(() => api.products());
@@ -773,6 +779,45 @@ export function Offers() {
   const accept      = async(id)=>{ try{ await api.acceptOffer(id); reload(); }catch(e){alert(e.message);} };
   const reject      = async(id)=>{ try{ await fetch(`/api/offers/${id}/reject`,{method:'POST',headers:{'Authorization':`Bearer ${localStorage.getItem('danitec_token')}`}}); reload(); }catch(e){alert(e.message);} };
   const convert     = async(id)=>{ try{ await api.convertOffer(id); reload(); }catch(e){alert(e.message);} };
+
+  const openEdit = async (o) => {
+    setEditOffer(o);
+    setEditSubject(o.subject || '');
+    setShowEdit(true);
+    setEditLoading(true);
+    try {
+      const detail = await api.offer(o.id);
+      setEditPositions((detail.items || []).map(i => ({
+        product_id:     i.product_id || null,
+        description:    i.description,
+        quantity:       parseFloat(i.quantity),
+        unit:           i.unit,
+        unit_price_net: parseFloat(i.unit_price_net),
+        discount_percent: parseFloat(i.discount_percent) || 0,
+        vat_rate:       parseFloat(i.vat_rate),
+      })));
+      setEditOffer(detail); // has plaud_transcript too
+    } catch(e) { alert(e.message); }
+    finally { setEditLoading(false); }
+  };
+  const saveEdit = async () => {
+    setEditSaving(true);
+    try {
+      const pos = editPositions.map(p => {
+        const qty = parseFloat(p.quantity)||1;
+        const price = parseFloat(p.unit_price_net)||0;
+        const disc = parseFloat(p.discount_percent)||0;
+        const vatR = parseFloat(p.vat_rate)??20;
+        const net = Math.round(qty*price*(1-disc/100)*100)/100;
+        const vat = Math.round(net*vatR/100*100)/100;
+        return { ...p, quantity:qty, unit_price_net:price, discount_percent:disc, vat_rate:vatR, net_amount:net, vat_amount:vat, gross_amount:Math.round((net+vat)*100)/100 };
+      });
+      await api.updateOffer(editOffer.id, { subject: editSubject, positions: pos });
+      setShowEdit(false);
+      reload();
+    } catch(e) { alert(e.message); }
+    finally { setEditSaving(false); }
+  };
 
   const openAnalyse = async (o) => {
     setAnalyseOffer(o);
@@ -815,6 +860,8 @@ export function Offers() {
               <td className="right" style={{fontWeight:500}}>{fmt(o.gross_total)}</td>
               <td><StatusBadge status={o.offer_status} label={STATUS_LABELS[o.offer_status]||o.offer_status}/></td>
               <td><div className="btn-group">
+                {/* Bearbeiten – immer bei Entwurf */}
+                {o.offer_status==='draft' && <button className="btn xs ghost icon" title="Angebot bearbeiten" onClick={()=>openEdit(o)}><i className="ti ti-pencil"/></button>}
                 {/* Entwurf → per E-Mail versenden (markiert gleichzeitig als "versendet") */}
                 {o.offer_status==='draft'    && <button className="btn xs amber"   title="Per E-Mail an Kunden senden"  onClick={()=>setShowEmail(o)}><i className="ti ti-mail"/>Per Mail senden</button>}
                 {/* Versendet → Angenommen oder Abgelehnt */}
@@ -857,6 +904,33 @@ export function Offers() {
           await api.sendEmailDoc(showEmail.id, body);
           reload();
         }}/>
+
+      {/* ── Angebot bearbeiten Modal ─────────────────────────────────────── */}
+      <Modal open={showEdit} onClose={()=>setShowEdit(false)} title={`Angebot bearbeiten – ${editOffer?.number||''}`} maxWidth={editOffer?.plaud_transcript ? 1100 : 780}
+        footer={<><button className="btn" onClick={()=>setShowEdit(false)}>Abbrechen</button><button className="btn primary" onClick={saveEdit} disabled={editSaving}><i className="ti ti-device-floppy"/>{editSaving?'Speichern…':'Speichern'}</button></>}>
+        {editLoading && <div style={{padding:32,textAlign:'center'}}><Spinner dark/></div>}
+        {!editLoading && editOffer && <div style={{display:'flex',gap:24}}>
+          {/* Linke Spalte: Transkript (nur wenn vorhanden) */}
+          {editOffer.plaud_transcript && <div style={{width:320,flexShrink:0}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
+              <i className="ti ti-microphone" style={{color:'var(--accent)'}}/>Plaud Transkript
+            </div>
+            <div style={{background:'var(--surface-2)',borderRadius:8,padding:12,fontSize:12,lineHeight:1.6,color:'var(--text-2)',maxHeight:500,overflowY:'auto',whiteSpace:'pre-wrap'}}>
+              {editOffer.plaud_transcript}
+            </div>
+          </div>}
+          {/* Rechte Spalte: Positionen */}
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:12,fontWeight:500,display:'block',marginBottom:4}}>Betreff</label>
+              <input value={editSubject} onChange={e=>setEditSubject(e.target.value)} style={{width:'100%'}}/>
+            </div>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Positionen</div>
+            <PositionsEditor positions={editPositions} onChange={setEditPositions} products={products?.data||[]}/>
+            {(() => { const t=calcTotals(editPositions); return <TotalsBox netto={t.net_total} ust={t.vat_total} brutto={t.gross_total}/>; })()}
+          </div>
+        </div>}
+      </Modal>
 
       {/* ── Was fehlt? Modal ─────────────────────────────────────────────── */}
       <Modal open={showAnalyse} onClose={()=>setShowAnalyse(false)} title={`Was fehlt? – ${analyseOffer?.number || ''}`} maxWidth={680}

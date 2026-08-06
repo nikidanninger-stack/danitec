@@ -31,11 +31,11 @@ offerRouter.post('/', authorize('admin','geschaeftsfuehrer','buchhaltung'), asyn
       // A-Nummer generieren (wenn nicht mitgegeben)
       const orderNum = req.body.orderNumber || await nextOrderNumber(req.user.company_id, 'A', client);
 
-      const { customerId,documentDate,validUntil,subject,netTotal=0,vatTotal=0,grossTotal=0,positions=[] } = req.body;
+      const { customerId,documentDate,validUntil,subject,netTotal=0,vatTotal=0,grossTotal=0,positions=[],plaudTranscript=null } = req.body;
       const doc = await client.query(
-        `INSERT INTO documents (company_id,type,number,order_number,status,customer_id,document_date,due_date,subject,net_total,vat_total,gross_total,created_by)
-         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
-        [req.user.company_id,nr,orderNum,customerId||null,documentDate,validUntil||null,subject||null,netTotal,vatTotal,grossTotal,req.user.id]);
+        `INSERT INTO documents (company_id,type,number,order_number,status,customer_id,document_date,due_date,subject,net_total,vat_total,gross_total,plaud_transcript,created_by)
+         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+        [req.user.company_id,nr,orderNum,customerId||null,documentDate,validUntil||null,subject||null,netTotal,vatTotal,grossTotal,plaudTranscript||null,req.user.id]);
       const docId = doc.rows[0].id;
       await client.query('INSERT INTO offer_details (document_id,offer_status,valid_until) VALUES ($1,$2,$3)',[docId,'draft',validUntil||null]);
       for(let i=0;i<positions.length;i++) {
@@ -109,6 +109,65 @@ offerRouter.post('/:id/convert-to-invoice', authorize('admin','geschaeftsfuehrer
       return { offer: o, invoice: inv.rows[0] };
     });
     res.json(r);
+  } catch(err) { next(err); }
+});
+
+// ─── GET /api/offers/:id — Einzelnes Angebot mit Positionen ──────────────────
+offerRouter.get('/:id', async (req, res, next) => {
+  try {
+    const doc = await query(
+      `SELECT d.*, od.offer_status, od.valid_until,
+              COALESCE(c.company_name, c.first_name||' '||c.last_name) AS customer_name,
+              c.email AS customer_email
+       FROM documents d
+       JOIN offer_details od ON od.document_id=d.id
+       LEFT JOIN customers c ON d.customer_id=c.id
+       WHERE d.id=$1 AND d.company_id=$2`,
+      [req.params.id, req.user.company_id]
+    );
+    if (!doc.rows[0]) return res.status(404).json({ error: 'Nicht gefunden' });
+    const items = await query(
+      'SELECT * FROM document_items WHERE document_id=$1 ORDER BY position_number',
+      [req.params.id]
+    );
+    res.json({ ...doc.rows[0], items: items.rows });
+  } catch(err) { next(err); }
+});
+
+// ─── PUT /api/offers/:id — Angebot-Positionen aktualisieren ──────────────────
+offerRouter.put('/:id', authorize('admin','geschaeftsfuehrer','buchhaltung'), async (req, res, next) => {
+  try {
+    const { subject, validUntil, positions = [] } = req.body;
+    await withTransaction(async (client) => {
+      await client.query('DELETE FROM document_items WHERE document_id=$1', [req.params.id]);
+      let net = 0, vat = 0, gross = 0;
+      for (let i = 0; i < positions.length; i++) {
+        const p = positions[i];
+        const qty   = parseFloat(p.quantity) || 1;
+        const price = parseFloat(p.unit_price_net) || 0;
+        const disc  = parseFloat(p.discount_percent) || 0;
+        const vatR  = parseFloat(p.vat_rate) ?? 20;
+        const netA  = Math.round(qty * price * (1 - disc/100) * 100) / 100;
+        const vatA  = Math.round(netA * vatR / 100 * 100) / 100;
+        const grs   = Math.round((netA + vatA) * 100) / 100;
+        net += netA; vat += vatA; gross += grs;
+        await client.query(
+          `INSERT INTO document_items (document_id,position_number,product_id,description,quantity,unit,unit_price_net,discount_percent,vat_rate,net_amount,vat_amount,gross_amount)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
+          [req.params.id, i+1, p.product_id||null, p.description, qty, p.unit||'Stk.', price, disc, vatR, netA, vatA, grs]
+        );
+      }
+      net = Math.round(net*100)/100; vat = Math.round(vat*100)/100; gross = Math.round(gross*100)/100;
+      await client.query(
+        `UPDATE documents SET subject=COALESCE($1,subject), net_total=$2, vat_total=$3, gross_total=$4 WHERE id=$5`,
+        [subject||null, net, vat, gross, req.params.id]
+      );
+      if (validUntil) {
+        await client.query('UPDATE offer_details SET valid_until=$1 WHERE document_id=$2', [validUntil, req.params.id]);
+        await client.query('UPDATE documents SET due_date=$1 WHERE id=$2', [validUntil, req.params.id]);
+      }
+    });
+    res.json({ success: true });
   } catch(err) { next(err); }
 });
 

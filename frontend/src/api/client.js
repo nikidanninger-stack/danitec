@@ -48,7 +48,9 @@ export const api = {
 
   // Angebote
   offers:           (params={}) => request('GET', '/offers', null, params),
+  offer:            (id)        => request('GET', `/offers/${id}`),
   createOffer:      (body)      => request('POST', '/offers', body),
+  updateOffer:      (id, body)  => request('PUT', `/offers/${id}`, body),
   sendOffer:        (id)        => request('POST', `/offers/${id}/send`),
   acceptOffer:      (id)        => request('POST', `/offers/${id}/accept`),
   rejectOffer:      (id)        => request('POST', `/offers/${id}/reject`),
