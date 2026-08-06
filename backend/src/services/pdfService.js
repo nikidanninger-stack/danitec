@@ -302,24 +302,33 @@ ${isInvoice && (company.iban || company.bank_name) ? `
 </html>`;
 }
 
-// ─── HTML → PDF via Puppeteer (Headless Chrome) ───────────────────────────────
+// ─── HTML → PDF via Puppeteer (Cloud-kompatibel via @sparticuz/chromium) ──────
 async function htmlToPdf(html) {
-  let puppeteer;
-  try { puppeteer = require('puppeteer'); }
-  catch(e) { throw new Error('puppeteer nicht installiert. Bitte "npm install" im backend-Ordner ausführen.'); }
+  let puppeteer, chromium;
+  try {
+    puppeteer = require('puppeteer-core');
+    chromium  = require('@sparticuz/chromium');
+  } catch(e) {
+    throw new Error('puppeteer-core oder @sparticuz/chromium nicht installiert: ' + e.message);
+  }
+
+  // Auf Render/Cloud: sparticuz Chromium verwenden; lokal: PUPPETEER_EXECUTABLE_PATH oder system Chrome
+  const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH
+    || (process.env.NODE_ENV === 'production' ? await chromium.executablePath() : undefined);
 
   const browser = await puppeteer.launch({
-    headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
     args: [
+      ...chromium.args,
       '--no-sandbox',
       '--disable-setuid-sandbox',
       '--disable-dev-shm-usage',
       '--disable-gpu',
-      '--disable-extensions',
-      '--single-process',
     ],
+    defaultViewport: chromium.defaultViewport,
+    executablePath: executablePath || await chromium.executablePath(),
+    headless: chromium.headless ?? true,
   });
+
   try {
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: 'networkidle0' });

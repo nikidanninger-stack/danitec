@@ -25,7 +25,8 @@
     "openai": "^4.52.0",
     "pdf-parse": "^1.1.1",
     "pg": "^8.12.0",
-    "puppeteer": "^22.12.0",
+    "@sparticuz/chromium": "^133.0.0",
+    "puppeteer-core": "^22.12.0",
     "winston": "^3.13.0"
   },
   "devDependencies": {
