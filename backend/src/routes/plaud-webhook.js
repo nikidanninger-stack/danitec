@@ -5,9 +5,17 @@ const { query } = require('../utils/db');
 const logger = require('../utils/logger');
 const { sendInternalNotification } = require('../services/emailService');
 
-// System-Prompt für Kundengespräche (enthält "danitec")
-const SYSTEM_PROMPT_KUNDE = `Du bist ein Assistent für einen österreichischen Kälte- und Klimatechnik-Betrieb (Danitec).
-Analysiere das folgende Kundengespräch-Transkript und extrahiere alle relevanten Informationen.
+// System-Prompt für Kundengespräche — mit Preislisten-Matching
+function buildSystemPromptKunde(products) {
+  const preisliste = products.map(p =>
+    `ID:${p.id} | ${p.name} | ${p.unit} | Netto: €${p.net_price}`
+  ).join('\n');
+
+  return `Du bist ein Assistent für einen österreichischen Kälte- und Klimatechnik-Betrieb (Danitec).
+Analysiere das Kundengespräch-Transkript und extrahiere alle relevanten Informationen.
+
+VERFÜGBARE PREISLISTE (matche Positionen so gut wie möglich):
+${preisliste}
 
 Gib die Antwort ALS REINES JSON zurück (kein Markdown, keine Erklärungen):
 {
@@ -30,9 +38,12 @@ Gib die Antwort ALS REINES JSON zurück (kein Markdown, keine Erklärungen):
   },
   "angebot_positionen": [
     {
-      "name": "Bezeichnung der Leistung oder des Materials",
+      "product_id": 123,
+      "name": "Bezeichnung (aus Preisliste wenn gefunden, sonst frei)",
       "einheit": "Stk.",
-      "menge": 1
+      "menge": 1,
+      "unit_price_net": 0.00,
+      "matched": true
     }
   ],
   "aufgaben": [
@@ -45,10 +56,15 @@ Gib die Antwort ALS REINES JSON zurück (kein Markdown, keine Erklärungen):
 
 Wichtige Regeln:
 - companyName füllen wenn Firma, sonst firstName/lastName
-- Angebotspositionen: nur wenn aus Gespräch erkennbar (Klimaanlage, Rohre, Montage etc.)
+- Mengen EXAKT aus dem Gespräch übernehmen (z.B. "10m Kabel" → menge: 10, einheit: "m")
+- product_id: ID aus der Preisliste wenn gefunden, sonst null
+- unit_price_net: Preis aus Preisliste wenn gefunden, sonst 0
+- matched: true wenn in Preisliste gefunden, false wenn nicht
+- Angebotspositionen: ALLE im Gespräch erwähnten Materialien und Leistungen
 - Einheiten: "Stk.", "m", "m²", "Std.", "Psch."
-- Aufgaben: alles was der Techniker noch klären oder recherchieren muss
+- Aufgaben: alles was noch geklärt oder beschafft werden muss
 - Antworte IMMER mit validem JSON`;
+}
 
 // System-Prompt für alle anderen Gespräche (ohne "danitec")
 const SYSTEM_PROMPT_ALLGEMEIN = `Du bist ein persönlicher Assistent.
@@ -137,13 +153,20 @@ async function processKundengespraech({ company_id, openai_api_key, transcript, 
   const { default: OpenAI } = require('openai');
   const openai = new OpenAI({ apiKey });
 
+  // Preisliste für Matching laden
+  const productsRes = await query(
+    'SELECT id, name, unit, net_price, gross_price, vat_rate FROM products WHERE company_id=$1 AND active=true ORDER BY name',
+    [company_id]
+  );
+  const products = productsRes.rows;
+
   const response = await openai.chat.completions.create({
     model: 'gpt-4o',
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT_KUNDE },
+      { role: 'system', content: buildSystemPromptKunde(products) },
       { role: 'user', content: `Aufnahme: ${recordingName}\n\nTranskript:\n\n${transcript.slice(0, 12000)}` }
     ],
-    max_tokens: 2500,
+    max_tokens: 3000,
     temperature: 0.1,
     response_format: { type: 'json_object' },
   });
@@ -206,9 +229,9 @@ async function processKundengespraech({ company_id, openai_api_key, transcript, 
       const subject    = projekt.bezeichnung || recordingName;
 
       const docRes = await client.query(
-        `INSERT INTO documents (company_id, type, number, order_number, status, customer_id, document_date, due_date, subject, net_total, vat_total, gross_total)
-         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,0,0,0) RETURNING id`,
-        [company_id, offerNumber, orderNumber, customerId, today, validUntil, subject]
+        `INSERT INTO documents (company_id, type, number, order_number, status, customer_id, document_date, due_date, subject, net_total, vat_total, gross_total, plaud_transcript)
+         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,0,0,0,$8) RETURNING id`,
+        [company_id, offerNumber, orderNumber, customerId, today, validUntil, subject, transcript]
       );
       offerId = docRes.rows[0].id;
 
@@ -217,14 +240,32 @@ async function processKundengespraech({ company_id, openai_api_key, transcript, 
         [offerId, 'draft', validUntil]
       );
 
+      let netTotal = 0;
       for (let i = 0; i < positionen.length; i++) {
         const pos = positionen[i];
+        const menge        = parseFloat(pos.menge) || 1;
+        const unitPriceNet = parseFloat(pos.unit_price_net) || 0;
+        const vatRate      = pos.vat_rate ? parseFloat(pos.vat_rate) : 20;
+        const netAmount    = Math.round(menge * unitPriceNet * 100) / 100;
+        const vatAmount    = Math.round(netAmount * vatRate / 100 * 100) / 100;
+        const grossAmount  = Math.round((netAmount + vatAmount) * 100) / 100;
+        netTotal += netAmount;
+
         await client.query(
-          `INSERT INTO document_items (document_id, position_number, description, quantity, unit, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount)
-           VALUES ($1,$2,$3,$4,$5,0,20,0,0,0)`,
-          [offerId, i + 1, pos.name, pos.menge || 1, pos.einheit || 'Stk.']
+          `INSERT INTO document_items (document_id, position_number, product_id, description, quantity, unit, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+          [offerId, i + 1, pos.product_id || null, pos.name, menge, pos.einheit || 'Stk.',
+           unitPriceNet, vatRate, netAmount, vatAmount, grossAmount]
         );
       }
+
+      // Gesamtsummen aktualisieren
+      const vatTotal   = Math.round(netTotal * 0.20 * 100) / 100;
+      const grossTotal = Math.round((netTotal + vatTotal) * 100) / 100;
+      await client.query(
+        'UPDATE documents SET net_total=$1, vat_total=$2, gross_total=$3 WHERE id=$4',
+        [netTotal, vatTotal, grossTotal, offerId]
+      );
 
       await client.query('COMMIT');
       logger.info(`Plaud: Angebot ${offerNumber} angelegt (ID ${offerId}) mit ${positionen.length} Positionen`);

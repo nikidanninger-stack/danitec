@@ -112,4 +112,118 @@ offerRouter.post('/:id/convert-to-invoice', authorize('admin','geschaeftsfuehrer
   } catch(err) { next(err); }
 });
 
+// ─── POST /api/offers/:id/analyse — "Was fehlt?" KI-Analyse ──────────────────
+offerRouter.post('/:id/analyse', authorize('admin','geschaeftsfuehrer','buchhaltung'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    // Angebot + Transkript + Positionen laden
+    const docRes = await query(
+      `SELECT d.subject, d.plaud_transcript,
+              COALESCE(c.company_name, c.first_name || ' ' || c.last_name) AS kunde
+       FROM documents d
+       LEFT JOIN customers c ON c.id = d.customer_id
+       WHERE d.id=$1 AND d.company_id=$2`,
+      [id, req.user.company_id]
+    );
+    if (!docRes.rows[0]) return res.status(404).json({ error: 'Angebot nicht gefunden.' });
+
+    const doc = docRes.rows[0];
+    if (!doc.plaud_transcript) {
+      return res.status(400).json({ error: 'Kein Plaud-Transkript für dieses Angebot vorhanden.' });
+    }
+
+    const itemsRes = await query(
+      'SELECT description, quantity, unit, unit_price_net FROM document_items WHERE document_id=$1 ORDER BY position_number',
+      [id]
+    );
+
+    const settingsRes = await query('SELECT openai_api_key FROM company_settings WHERE company_id=$1', [req.user.company_id]);
+    const apiKey = settingsRes.rows[0]?.openai_api_key || process.env.OPENAI_API_KEY;
+    if (!apiKey) return res.status(400).json({ error: 'Kein OpenAI API-Key konfiguriert.' });
+
+    const { default: OpenAI } = require('openai');
+    const openai = new OpenAI({ apiKey });
+
+    const currentItems = itemsRes.rows.map(i =>
+      `- ${i.description} (${i.quantity} ${i.unit}, €${i.unit_price_net} Netto)`
+    ).join('\n');
+
+    const prompt = `Du analysierst ein Klimatechnik-Angebot. Vergleiche das Transkript mit den bereits eingetragenen Positionen.
+
+TRANSKRIPT:
+${doc.plaud_transcript.slice(0, 8000)}
+
+BEREITS IM ANGEBOT EINGETRAGEN:
+${currentItems || '(noch keine Positionen)'}
+
+Antworte mit REINEM JSON:
+{
+  "fehlende_positionen": [
+    { "name": "Bezeichnung", "menge": 1, "einheit": "Stk.", "grund": "Warum fehlt das?" }
+  ],
+  "preis_null": [
+    { "name": "Bezeichnung", "hinweis": "Welchen Preis schätzt du dafür?" }
+  ],
+  "vollstaendigkeit": 75,
+  "kommentar": "Kurzer Kommentar zum Angebot"
+}
+
+Regeln:
+- fehlende_positionen: Materialien/Leistungen die im Transkript erwähnt wurden aber NICHT im Angebot sind
+- preis_null: Positionen die im Angebot sind aber Preis 0 haben und dringend einen Preis brauchen
+- vollstaendigkeit: 0-100%, wie vollständig ist das Angebot basierend auf dem Transkript
+- Antworte NUR mit validem JSON`;
+
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1500,
+      temperature: 0.1,
+      response_format: { type: 'json_object' },
+    });
+
+    const analyse = JSON.parse(response.choices[0]?.message?.content || '{}');
+    res.json({ ...analyse, kunde: doc.kunde, betreff: doc.subject });
+
+  } catch(err) { next(err); }
+});
+
+// ─── POST /api/offers/:id/add-position — Position aus Analyse hinzufügen ─────
+offerRouter.post('/:id/add-position', authorize('admin','geschaeftsfuehrer','buchhaltung'), async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const { name, menge, einheit, unit_price_net = 0 } = req.body;
+
+    const lastPos = await query(
+      'SELECT COALESCE(MAX(position_number),0)+1 AS next FROM document_items WHERE document_id=$1',
+      [id]
+    );
+    const posNr = lastPos.rows[0].next;
+    const qty   = parseFloat(menge) || 1;
+    const price = parseFloat(unit_price_net) || 0;
+    const net   = Math.round(qty * price * 100) / 100;
+    const vat   = Math.round(net * 0.20 * 100) / 100;
+
+    await query(
+      `INSERT INTO document_items (document_id, position_number, description, quantity, unit, unit_price_net, vat_rate, net_amount, vat_amount, gross_amount)
+       VALUES ($1,$2,$3,$4,$5,$6,20,$7,$8,$9)`,
+      [id, posNr, name, qty, einheit || 'Stk.', price, net, vat, net + vat]
+    );
+
+    // Gesamtsummen neu berechnen
+    const totals = await query(
+      'SELECT SUM(net_amount) AS net, SUM(vat_amount) AS vat, SUM(gross_amount) AS gross FROM document_items WHERE document_id=$1',
+      [id]
+    );
+    const t = totals.rows[0];
+    await query(
+      'UPDATE documents SET net_total=$1, vat_total=$2, gross_total=$3 WHERE id=$4',
+      [t.net||0, t.vat||0, t.gross||0, id]
+    );
+
+    res.json({ success: true });
+  } catch(err) { next(err); }
+});
+
 module.exports = offerRouter;

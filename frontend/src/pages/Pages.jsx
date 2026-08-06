@@ -737,6 +737,10 @@ export function Offers() {
   const [filter, setFilter] = useState('all');
   const [showNew, setShowNew] = useState(false);
   const [showEmail, setShowEmail] = useState(null);
+  const [showAnalyse, setShowAnalyse] = useState(false);
+  const [analyseData, setAnalyseData] = useState(null);
+  const [analyseLoading, setAnalyseLoading] = useState(false);
+  const [analyseOffer, setAnalyseOffer] = useState(null);
   const { data, loading, reload } = useData(() => api.offers());
   const { data: customers } = useData(() => api.customers());
   const { data: products  } = useData(() => api.products());
@@ -770,6 +774,25 @@ export function Offers() {
   const reject      = async(id)=>{ try{ await fetch(`/api/offers/${id}/reject`,{method:'POST',headers:{'Authorization':`Bearer ${localStorage.getItem('danitec_token')}`}}); reload(); }catch(e){alert(e.message);} };
   const convert     = async(id)=>{ try{ await api.convertOffer(id); reload(); }catch(e){alert(e.message);} };
 
+  const openAnalyse = async (o) => {
+    setAnalyseOffer(o);
+    setShowAnalyse(true);
+    setAnalyseData(null);
+    setAnalyseLoading(true);
+    try {
+      const r = await api.offerAnalyse(o.id);
+      setAnalyseData(r);
+    } catch(e) { alert(e.message); }
+    finally { setAnalyseLoading(false); }
+  };
+  const addMissingPosition = async (pos) => {
+    try {
+      await api.offerAddPosition(analyseOffer.id, { name: pos.name, menge: pos.menge, einheit: pos.einheit });
+      setAnalyseData(d => ({ ...d, fehlende_positionen: d.fehlende_positionen.filter(p => p !== pos) }));
+      reload();
+    } catch(e) { alert(e.message); }
+  };
+
   return (
     <div className="page-body">
       <div className="toolbar">
@@ -802,6 +825,8 @@ export function Offers() {
                 {o.offer_status==='accepted' && <button className="btn xs primary" title="In Rechnung umwandeln" onClick={()=>convert(o.id)}><i className="ti ti-file-invoice"/>→ Rechnung</button>}
                 {/* immer: PDF */}
                 <button className="btn xs ghost icon" title="PDF" onClick={()=>{ const t=localStorage.getItem('danitec_token'); window.open(`/api/pdf/${o.id}?token=${t}`,'_blank'); }}><i className="ti ti-file-type-pdf"/></button>
+                {/* Was fehlt? – nur bei Angeboten mit Plaud-Transkript */}
+                {o.plaud_transcript && <button className="btn xs ghost icon" title="Was fehlt?" onClick={()=>openAnalyse(o)} style={{color:'var(--accent)'}}><i className="ti ti-sparkles"/></button>}
               </div></td>
             </tr>
           ))}</tbody>
@@ -832,6 +857,56 @@ export function Offers() {
           await api.sendEmailDoc(showEmail.id, body);
           reload();
         }}/>
+
+      {/* ── Was fehlt? Modal ─────────────────────────────────────────────── */}
+      <Modal open={showAnalyse} onClose={()=>setShowAnalyse(false)} title={`Was fehlt? – ${analyseOffer?.number || ''}`} maxWidth={680}
+        footer={<button className="btn" onClick={()=>setShowAnalyse(false)}>Schließen</button>}>
+        {analyseLoading && <div style={{padding:32,textAlign:'center'}}><Spinner dark/><p style={{color:'var(--text-2)',marginTop:12,fontSize:13}}>KI analysiert Transkript…</p></div>}
+        {analyseData && <>
+          {/* Vollständigkeit */}
+          <div style={{marginBottom:20}}>
+            <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+              <span style={{fontWeight:600,fontSize:14}}>Vollständigkeit des Angebots</span>
+              <span style={{fontWeight:700,fontSize:18,color:analyseData.vollstaendigkeit>=80?'var(--success)':analyseData.vollstaendigkeit>=50?'#f59e0b':'var(--danger)'}}>{analyseData.vollstaendigkeit}%</span>
+            </div>
+            <div style={{height:10,background:'var(--surface-2)',borderRadius:6,overflow:'hidden'}}>
+              <div style={{height:'100%',width:`${analyseData.vollstaendigkeit}%`,background:analyseData.vollstaendigkeit>=80?'var(--success)':analyseData.vollstaendigkeit>=50?'#f59e0b':'var(--danger)',borderRadius:6,transition:'width .5s ease'}}/>
+            </div>
+            {analyseData.kommentar && <p style={{fontSize:12,color:'var(--text-2)',marginTop:8,marginBottom:0}}>{analyseData.kommentar}</p>}
+          </div>
+
+          {/* Positionen ohne Preis */}
+          {analyseData.preis_null?.length > 0 && <div style={{marginBottom:18}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:8,color:'#f59e0b'}}>⚠️ Positionen ohne Preis ({analyseData.preis_null.length})</div>
+            {analyseData.preis_null.map((p,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:'rgba(245,158,11,.08)',borderRadius:8,marginBottom:4,gap:12}}>
+                <span style={{fontSize:13,fontWeight:500}}>{p.name}</span>
+                <span style={{fontSize:11,color:'var(--text-2)',textAlign:'right',flexShrink:0,maxWidth:240}}>{p.hinweis}</span>
+              </div>
+            ))}
+          </div>}
+
+          {/* Fehlende Positionen */}
+          <div style={{marginBottom:8}}>
+            <div style={{fontWeight:600,fontSize:13,marginBottom:8,color:analyseData.fehlende_positionen?.length>0?'var(--danger)':'var(--success)'}}>
+              {analyseData.fehlende_positionen?.length>0
+                ? `❌ Fehlt im Angebot (${analyseData.fehlende_positionen.length})`
+                : '✅ Alle Positionen aus dem Transkript sind eingetragen'}
+            </div>
+            {analyseData.fehlende_positionen?.map((p,i)=>(
+              <div key={i} style={{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'10px 12px',background:'rgba(239,68,68,.06)',border:'1px solid rgba(239,68,68,.15)',borderRadius:8,marginBottom:6,gap:12}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontWeight:600,fontSize:13,marginBottom:2}}>{p.name}</div>
+                  <div style={{fontSize:11,color:'var(--text-2)'}}>{p.menge} {p.einheit} · {p.grund}</div>
+                </div>
+                <button className="btn xs success" style={{flexShrink:0}} onClick={()=>addMissingPosition(p)}>
+                  <i className="ti ti-plus"/>Hinzufügen
+                </button>
+              </div>
+            ))}
+          </div>
+        </>}
+      </Modal>
     </div>
   );
 }

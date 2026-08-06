@@ -247,6 +247,9 @@ export const api = {
   createKassaeintrag:(body)     => request('POST', '/kassabuch', body),
   deleteKassaeintrag:(id)       => request('DELETE', `/kassabuch/${id}`),
 
+  offerAnalyse:     (id)        => request('POST', `/offers/${id}/analyse`),
+  offerAddPosition: (id, body)  => request('POST', `/offers/${id}/add-position`, body),
+
   gruendungskosten:       ()     => request('GET',    '/gruendungskosten'),
   createGruendungskosten: (body) => request('POST',   '/gruendungskosten', body),
   deleteGruendungskosten: (id)   => request('DELETE', `/gruendungskosten/${id}`),
