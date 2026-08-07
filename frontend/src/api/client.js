@@ -145,17 +145,20 @@ export const api = {
   },
   deleteLetterhead: () => request('DELETE', '/company/letterhead'),
 
-  // Projekte
-  projects:          (params={})   => request('GET', '/projects', null, params),
-  project:           (id)          => request('GET', `/projects/${id}`),
-  createProject:     (body)        => request('POST', '/projects', body),
-  updateProject:     (id, body)    => request('PUT', `/projects/${id}`, body),
-  deleteProject:     (id)          => request('DELETE', `/projects/${id}`),
-  createTask:        (pid, body)   => request('POST', `/projects/${pid}/tasks`, body),
-  updateTask:        (pid, tid, b) => request('PUT', `/projects/${pid}/tasks/${tid}`, b),
-  deleteTask:        (pid, tid)    => request('DELETE', `/projects/${pid}/tasks/${tid}`),
-  createNote:        (pid, body)   => request('POST', `/projects/${pid}/notes`, body),
-  deleteNote:        (pid, nid)    => request('DELETE', `/projects/${pid}/notes/${nid}`),
+  // Projekte (Auftragsmappe: Angebote + Rechnungen + Fotos)
+  projects:           (params={})   => request('GET', '/projects', null, params),
+  project:            (id)          => request('GET', `/projects/${id}`),
+  createProject:      (body)        => request('POST', '/projects', body),
+  updateProject:      (id, body)    => request('PUT', `/projects/${id}`, body),
+  deleteProject:      (id)          => request('DELETE', `/projects/${id}`),
+  linkDocToProject:   (id, docId)   => request('POST', `/projects/${id}/link-document`, { documentId: docId }),
+  uploadProjectPhoto: (id, body)    => request('POST', `/projects/${id}/photos`, body),
+  deleteProjectPhoto: (id, photoId) => request('DELETE', `/projects/${id}/photos/${photoId}`),
+  projectPhotoUrl:    (id, photoId) => {
+    const token = getToken();
+    const base = BASE.startsWith('http') ? BASE : `${window.location.origin}${BASE}`;
+    return `${base}/projects/${id}/photos/${photoId}?token=${token}`;
+  },
 
   // Serviceberichte
   serviceReports:       (params={})   => request('GET', '/service-reports', null, params),

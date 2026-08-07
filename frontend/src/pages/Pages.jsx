@@ -803,15 +803,18 @@ export function Offers() {
   const saveEdit = async () => {
     setEditSaving(true);
     try {
-      const pos = editPositions.map(p => {
-        const qty = parseFloat(p.quantity)||1;
-        const price = parseFloat(p.unit_price_net)||0;
-        const disc = parseFloat(p.discount_percent)||0;
-        const vatR = parseFloat(p.vat_rate)??20;
-        const net = Math.round(qty*price*(1-disc/100)*100)/100;
-        const vat = Math.round(net*vatR/100*100)/100;
-        return { ...p, quantity:qty, unit_price_net:price, discount_percent:disc, vat_rate:vatR, net_amount:net, vat_amount:vat, gross_amount:Math.round((net+vat)*100)/100 };
-      });
+      // Nur aktive Positionen speichern
+      const pos = editPositions
+        .filter(p => p.aktiv !== false)
+        .map(p => {
+          const qty  = parseFloat(p.quantity)||1;
+          const price= parseFloat(p.unit_price_net)||0;
+          const disc = parseFloat(p.discount_percent)||0;
+          const vatR = parseFloat(p.vat_rate)??20;
+          const net  = Math.round(qty*price*(1-disc/100)*100)/100;
+          const vat  = Math.round(net*vatR/100*100)/100;
+          return { ...p, quantity:qty, unit_price_net:price, discount_percent:disc, vat_rate:vatR, net_amount:net, vat_amount:vat, gross_amount:Math.round((net+vat)*100)/100 };
+        });
       await api.updateOffer(editOffer.id, { subject: editSubject, positions: pos });
       setShowEdit(false);
       reload();
@@ -906,28 +909,122 @@ export function Offers() {
         }}/>
 
       {/* ── Angebot bearbeiten Modal ─────────────────────────────────────── */}
-      <Modal open={showEdit} onClose={()=>setShowEdit(false)} title={`Angebot bearbeiten – ${editOffer?.number||''}`} maxWidth={editOffer?.plaud_transcript ? 1100 : 780}
+      <Modal open={showEdit} onClose={()=>setShowEdit(false)} title={`Angebot bearbeiten – ${editOffer?.number||''}`} maxWidth={editOffer?.plaud_transcript ? 1160 : 900}
         footer={<><button className="btn" onClick={()=>setShowEdit(false)}>Abbrechen</button><button className="btn primary" onClick={saveEdit} disabled={editSaving}><i className="ti ti-device-floppy"/>{editSaving?'Speichern…':'Speichern'}</button></>}>
         {editLoading && <div style={{padding:32,textAlign:'center'}}><Spinner dark/></div>}
-        {!editLoading && editOffer && <div style={{display:'flex',gap:24}}>
-          {/* Linke Spalte: Transkript (nur wenn vorhanden) */}
-          {editOffer.plaud_transcript && <div style={{width:320,flexShrink:0}}>
-            <div style={{fontWeight:600,fontSize:13,marginBottom:8,display:'flex',alignItems:'center',gap:6}}>
-              <i className="ti ti-microphone" style={{color:'var(--accent)'}}/>Plaud Transkript
+        {!editLoading && editOffer && <div style={{display:'flex',gap:20}}>
+          {/* Linke Spalte: Transkript */}
+          {editOffer.plaud_transcript && <div style={{width:260,flexShrink:0}}>
+            <div style={{fontWeight:600,fontSize:12,marginBottom:6,color:'var(--accent)',display:'flex',alignItems:'center',gap:5}}>
+              <i className="ti ti-microphone"/>Plaud Transkript
             </div>
-            <div style={{background:'var(--surface-2)',borderRadius:8,padding:12,fontSize:12,lineHeight:1.6,color:'var(--text-2)',maxHeight:500,overflowY:'auto',whiteSpace:'pre-wrap'}}>
+            <div style={{background:'var(--surface-2)',borderRadius:8,padding:10,fontSize:11,lineHeight:1.6,color:'var(--text-2)',maxHeight:520,overflowY:'auto',whiteSpace:'pre-wrap'}}>
               {editOffer.plaud_transcript}
             </div>
           </div>}
-          {/* Rechte Spalte: Positionen */}
+          {/* Rechte Spalte: Kalkulations-Tabelle */}
           <div style={{flex:1,minWidth:0}}>
             <div style={{marginBottom:12}}>
               <label style={{fontSize:12,fontWeight:500,display:'block',marginBottom:4}}>Betreff</label>
               <input value={editSubject} onChange={e=>setEditSubject(e.target.value)} style={{width:'100%'}}/>
             </div>
-            <div style={{fontWeight:600,fontSize:13,marginBottom:8}}>Positionen</div>
-            <PositionsEditor positions={editPositions} onChange={setEditPositions} products={products?.data||[]}/>
-            {(() => { const t=calcTotals(editPositions); return <TotalsBox netto={t.net_total} ust={t.vat_total} brutto={t.gross_total}/>; })()}
+            {/* Positions-Tabelle im Kalkulations-Stil */}
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:12}}>
+                <thead>
+                  <tr style={{borderBottom:'2px solid var(--border)',color:'var(--text-2)',fontSize:11}}>
+                    <th style={{width:32,padding:'6px 4px',textAlign:'center'}}>An</th>
+                    <th style={{padding:'6px 8px',textAlign:'left'}}>Beschreibung</th>
+                    <th style={{width:64,padding:'6px 4px',textAlign:'right'}}>Menge</th>
+                    <th style={{width:72,padding:'6px 4px',textAlign:'left'}}>Einheit</th>
+                    <th style={{width:90,padding:'6px 4px',textAlign:'right'}}>Netto €</th>
+                    <th style={{width:42,padding:'6px 4px',textAlign:'right'}}>USt%</th>
+                    <th style={{width:90,padding:'6px 4px',textAlign:'right'}}>Netto ges.</th>
+                    <th style={{width:90,padding:'6px 4px',textAlign:'right'}}>Brutto</th>
+                    <th style={{width:32}}/>
+                  </tr>
+                </thead>
+                <tbody>
+                  {editPositions.map((p,i)=>{
+                    const aktiv = p.aktiv !== false;
+                    const qty   = parseFloat(p.quantity)||0;
+                    const price = parseFloat(p.unit_price_net)||0;
+                    const vatR  = parseFloat(p.vat_rate)||20;
+                    const net   = Math.round(qty*price*100)/100;
+                    const vat   = Math.round(net*vatR/100*100)/100;
+                    const gross = Math.round((net+vat)*100)/100;
+                    const upd   = (k,v) => setEditPositions(ps=>ps.map((x,j)=>j===i?{...x,[k]:v}:x));
+                    return (
+                      <tr key={i} style={{borderBottom:'1px solid var(--border)',opacity:aktiv?1:0.4,background:aktiv?'transparent':'var(--surface-2)'}}>
+                        <td style={{textAlign:'center',padding:'4px'}}>
+                          <input type="checkbox" checked={aktiv} onChange={e=>upd('aktiv',e.target.checked)} style={{cursor:'pointer'}}/>
+                        </td>
+                        <td style={{padding:'4px 8px'}}>
+                          <input value={p.description||''} onChange={e=>upd('description',e.target.value)}
+                            style={{width:'100%',background:'transparent',border:'1px solid transparent',borderRadius:4,padding:'3px 6px',fontSize:12}}
+                            onFocus={e=>e.target.style.borderColor='var(--accent)'}
+                            onBlur={e=>e.target.style.borderColor='transparent'}/>
+                        </td>
+                        <td style={{padding:'4px'}}>
+                          <input type="number" value={p.quantity||''} onChange={e=>upd('quantity',parseFloat(e.target.value)||0)} min="0" step="any"
+                            style={{width:60,textAlign:'right',background:'transparent',border:'1px solid transparent',borderRadius:4,padding:'3px 4px',fontSize:12}}
+                            onFocus={e=>e.target.style.borderColor='var(--accent)'}
+                            onBlur={e=>e.target.style.borderColor='transparent'}/>
+                        </td>
+                        <td style={{padding:'4px'}}>
+                          <select value={p.unit||'Stk.'} onChange={e=>upd('unit',e.target.value)} style={{fontSize:12,background:'transparent',border:'none',padding:'3px 0'}}>
+                            {['Stk.','m','m²','m³','Std.','Psch.','kg','l','—'].map(u=><option key={u}>{u}</option>)}
+                          </select>
+                        </td>
+                        <td style={{padding:'4px'}}>
+                          <input type="number" value={p.unit_price_net||''} onChange={e=>upd('unit_price_net',parseFloat(e.target.value)||0)} min="0" step="0.01"
+                            style={{width:82,textAlign:'right',background: price===0 && aktiv?'rgba(239,68,68,.08)':'transparent',border: price===0 && aktiv?'1px solid rgba(239,68,68,.3)':'1px solid transparent',borderRadius:4,padding:'3px 4px',fontSize:12,color: price===0 && aktiv?'var(--danger)':'inherit'}}
+                            onFocus={e=>{e.target.style.borderColor='var(--accent)';e.target.style.background='transparent';}}
+                            onBlur={e=>{e.target.style.borderColor=price===0&&aktiv?'rgba(239,68,68,.3)':'transparent';e.target.style.background=price===0&&aktiv?'rgba(239,68,68,.08)':'transparent';}}/>
+                        </td>
+                        <td style={{padding:'4px',textAlign:'right',color:'var(--text-2)'}}>{vatR}%</td>
+                        <td style={{padding:'4px',textAlign:'right',fontWeight:aktiv?500:400}}>{aktiv?`€ ${net.toFixed(2)}`:'–'}</td>
+                        <td style={{padding:'4px',textAlign:'right',fontWeight:aktiv?600:400}}>{aktiv?`€ ${gross.toFixed(2)}`:'–'}</td>
+                        <td style={{padding:'4px',textAlign:'center'}}>
+                          <button onClick={()=>setEditPositions(ps=>ps.filter((_,j)=>j!==i))} style={{background:'none',border:'none',cursor:'pointer',color:'var(--text-2)',padding:2}} title="Entfernen">
+                            <i className="ti ti-trash" style={{fontSize:14}}/>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            {/* Position hinzufügen */}
+            <button onClick={()=>setEditPositions(ps=>[...ps,{description:'',quantity:1,unit:'Stk.',unit_price_net:0,vat_rate:20,aktiv:true}])}
+              style={{marginTop:8,background:'none',border:'1px dashed var(--border)',borderRadius:6,padding:'6px 14px',fontSize:12,cursor:'pointer',color:'var(--text-2)',width:'100%'}}>
+              + Position hinzufügen
+            </button>
+            {/* Summen */}
+            {(()=>{
+              const aktive = editPositions.filter(p=>p.aktiv!==false);
+              const netGes   = aktive.reduce((s,p)=>{ const q=parseFloat(p.quantity)||0,pr=parseFloat(p.unit_price_net)||0; return s+Math.round(q*pr*100)/100; },0);
+              const vatGes   = aktive.reduce((s,p)=>{ const q=parseFloat(p.quantity)||0,pr=parseFloat(p.unit_price_net)||0,r=parseFloat(p.vat_rate)||20; const n=Math.round(q*pr*100)/100; return s+Math.round(n*r/100*100)/100; },0);
+              const grossGes = Math.round((netGes+vatGes)*100)/100;
+              const nullPos  = aktive.filter(p=>!parseFloat(p.unit_price_net)).length;
+              return (
+                <div style={{marginTop:12,borderTop:'2px solid var(--border)',paddingTop:10}}>
+                  {nullPos>0 && <div style={{fontSize:11,color:'var(--danger)',marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
+                    <i className="ti ti-alert-triangle"/>Noch {nullPos} Position{nullPos>1?'en':''} ohne Preis — rot markiert
+                  </div>}
+                  <div style={{display:'flex',justifyContent:'flex-end',gap:24,fontSize:13}}>
+                    <span style={{color:'var(--text-2)'}}>Netto gesamt</span><span style={{fontWeight:500}}>€ {netGes.toFixed(2)}</span>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'flex-end',gap:24,fontSize:13,marginTop:3}}>
+                    <span style={{color:'var(--text-2)'}}>Umsatzsteuer</span><span style={{fontWeight:500}}>€ {vatGes.toFixed(2)}</span>
+                  </div>
+                  <div style={{display:'flex',justifyContent:'flex-end',gap:24,fontSize:15,marginTop:6,fontWeight:700}}>
+                    <span>Brutto gesamt</span><span>€ {grossGes.toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         </div>}
       </Modal>
@@ -1014,6 +1111,61 @@ function CustomerDetail({ custId, onBack, onReloadCustomers, onNavigate }) {
   const [qProject, setQProject] = useState({});
   const { data: usersDataCd } = useData(() => api.users());
 
+  // Auftragsmappe (Projekte mit Fotos + Docs)
+  const [auftraege, setAuftraege] = useState([]);
+  const [auftraegeLoading, setAuftraegeLoading] = useState(false);
+  const [selectedAuftrag, setSelectedAuftrag] = useState(null);
+  const [auftragDetail, setAuftragDetail] = useState(null);
+  const [auftragDetailLoading, setAuftragDetailLoading] = useState(false);
+  const [auftragTab, setAuftragTab] = useState('docs');
+  const [photoUploading, setPhotoUploading] = useState(false);
+  const [lightboxPhoto, setLightboxPhoto] = useState(null);
+
+  const loadAuftraege = React.useCallback(async () => {
+    if (!custId) return;
+    setAuftraegeLoading(true);
+    try { setAuftraege(await api.projects({ customerId: custId })); }
+    catch(e) { /* silent */ }
+    finally { setAuftraegeLoading(false); }
+  }, [custId]);
+
+  React.useEffect(() => { if (tab === 'projekte') loadAuftraege(); }, [tab, loadAuftraege]);
+
+  const openAuftrag = async (proj) => {
+    setSelectedAuftrag(proj);
+    setAuftragTab('docs');
+    setAuftragDetailLoading(true);
+    try { setAuftragDetail(await api.project(proj.id)); }
+    catch(e) { /* silent */ }
+    finally { setAuftragDetailLoading(false); }
+  };
+
+  const uploadPhoto = async (e) => {
+    const file = e.target.files[0];
+    if (!file || !selectedAuftrag) return;
+    setPhotoUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        const dataBase64 = ev.target.result.split(',')[1];
+        await api.uploadProjectPhoto(selectedAuftrag.id, { filename: file.name, mimetype: file.type, dataBase64 });
+        const updated = await api.project(selectedAuftrag.id);
+        setAuftragDetail(updated);
+        loadAuftraege();
+        setPhotoUploading(false);
+      };
+      reader.readAsDataURL(file);
+    } catch(err) { setAlert({ type:'error', msg: err.message }); setPhotoUploading(false); }
+  };
+
+  const deletePhoto = async (photoId) => {
+    if (!confirm('Foto löschen?')) return;
+    await api.deleteProjectPhoto(selectedAuftrag.id, photoId);
+    const updated = await api.project(selectedAuftrag.id);
+    setAuftragDetail(updated);
+    loadAuftraege();
+  };
+
   const saveQuickSvc = async () => {
     setQuickSaving(true);
     try {
@@ -1033,8 +1185,8 @@ function CustomerDetail({ custId, onBack, onReloadCustomers, onNavigate }) {
   const saveQuickProject = async () => {
     setQuickSaving(true);
     try {
-      await api.createProject({ ...qProject, customerId: custId, startDate: qProject.startDate||today2(), status:'active', priority:'normal' });
-      setShowQuickProject(false); reload();
+      await api.createProject({ customerId: custId, name: qProject.name, description: qProject.description||'', status:'aktiv' });
+      setShowQuickProject(false); loadAuftraege();
     } catch(e) { setAlert({type:'error',msg:e.message}); }
     finally { setQuickSaving(false); }
   };
@@ -1099,7 +1251,7 @@ function CustomerDetail({ custId, onBack, onReloadCustomers, onNavigate }) {
     { id:'wartung',    label:`Wartungsverträge (${contracts.length})`,   icon:'ti-file-certificate' },
     { id:'service',    label:`Serviceberichte (${svcReports.length})`,   icon:'ti-clipboard-check' },
     { id:'rechnungen', label:`Rechnungen (${invoices.length})`,          icon:'ti-file-invoice' },
-    { id:'projekte',   label:`Planungsprojekte (${projects.length})`,            icon:'ti-hammer' },
+    { id:'projekte',   label:`Auftragsmappe (${auftraege.length})`,               icon:'ti-folder' },
     { id:'telefon',    label:`Telefon (${phones.length})`,               icon:'ti-phone' },
   ];
 
@@ -1199,7 +1351,7 @@ function CustomerDetail({ custId, onBack, onReloadCustomers, onNavigate }) {
           {tab==='telefon'   && <button className="btn primary xs" onClick={()=>{setEditPhone(null);setPf({label:'Standard',phone:''});setShowPhoneModal(true);}}><i className="ti ti-plus"/> Nummer</button>}
           {tab==='service'   && <button className="btn primary xs" onClick={()=>{setQSvc({reportType:'service',reportDate:today2(),workPerformed:'',defectsFound:[''],recommendations:'',hoursWorked:'',travelHours:'',timeFrom:'',timeTo:'',technicianId:'',status:'draft'});setShowQuickSvc(true);}}><i className="ti ti-plus"/> Servicebericht</button>}
           {tab==='wartung'   && <button className="btn primary xs" onClick={()=>{setQContract({name:'',intervalMonths:12,startDate:today2(),priceYearly:''});setShowQuickContract(true);}}><i className="ti ti-plus"/> Wartungsvertrag</button>}
-          {tab==='projekte'  && <button className="btn primary xs" onClick={()=>{setQProject({name:'',description:'',startDate:today2()});setShowQuickProject(true);}}><i className="ti ti-plus"/> Projekt</button>}
+          {tab==='projekte'  && <button className="btn primary xs" onClick={()=>{setQProject({name:'',description:''});setShowQuickProject(true);}}><i className="ti ti-plus"/> Neue Mappe</button>}
           {tab==='rechnungen'&& <button className="btn primary xs" onClick={()=>onNavigate('invoices')}><i className="ti ti-plus"/> Rechnung</button>}
         </div>
       </div>
@@ -1317,21 +1469,150 @@ function CustomerDetail({ custId, onBack, onReloadCustomers, onNavigate }) {
 
       {/* Tab: Projekte */}
       {tab === 'projekte' && (
-        <div className="card" style={{padding:0,overflow:'hidden'}}>
-          {projects.length === 0
-            ? <EmptyState icon="ti-hammer" title="Keine Planungsprojekte" subtitle="Noch kein Planungsprojekt für diesen Kunden angelegt."/>
-            : <table>
-                <thead><tr><th>Nr.</th><th>Projektname</th><th>Start</th><th>Status</th></tr></thead>
-                <tbody>{projects.map(p => (
-                  <tr key={p.id}>
-                    <td style={{fontSize:11,color:'var(--text-secondary)'}}>{p.project_number}</td>
-                    <td style={{fontWeight:600,fontSize:13}}>{p.name}</td>
-                    <td style={{fontSize:12}}>{p.start_date ? fmtDate(p.start_date) : '—'}</td>
-                    <td><span style={{fontSize:11,fontWeight:600,color:PROJ_STATUS_COLOR[p.status]||'var(--text-secondary)'}}>{PROJ_STATUS_LABEL[p.status]||p.status}</span></td>
-                  </tr>
-                ))}</tbody>
-              </table>
-          }
+        <div>
+          {auftraegeLoading && <Spinner/>}
+          {!auftraegeLoading && auftraege.length === 0 && (
+            <EmptyState icon="ti-folder" title="Noch keine Aufträge" subtitle="Lege einen neuen Auftrag an um Angebote, Rechnungen und Fotos zu bündeln."/>
+          )}
+          {!auftraegeLoading && auftraege.length > 0 && (
+            <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(240px,1fr))',gap:12}}>
+              {auftraege.map(p => {
+                const statusColor = {aktiv:'var(--green)',abgeschlossen:'var(--blue)',storniert:'var(--text-tertiary)'}[p.status]||'var(--accent)';
+                return (
+                  <div key={p.id} className="card" style={{cursor:'pointer',padding:'14px 16px',transition:'border-color .15s',border:'1px solid var(--border)'}}
+                    onClick={()=>openAuftrag(p)}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor='var(--accent)'}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor='var(--border)'}>
+                    <div style={{display:'flex',justifyContent:'space-between',alignItems:'flex-start',marginBottom:8}}>
+                      <div style={{fontWeight:700,fontSize:14,lineHeight:1.3,flex:1}}>{p.name}</div>
+                      <span style={{fontSize:10,fontWeight:700,color:statusColor,background:`${statusColor}22`,padding:'2px 7px',borderRadius:4,marginLeft:6,whiteSpace:'nowrap'}}>{p.status}</span>
+                    </div>
+                    <div style={{display:'flex',gap:12,fontSize:12,color:'var(--text-secondary)'}}>
+                      <span><i className="ti ti-file-text" style={{marginRight:3}}/>{p.offer_count||0} Angebote</span>
+                      <span><i className="ti ti-file-invoice" style={{marginRight:3}}/>{p.invoice_count||0} Rechnungen</span>
+                      <span><i className="ti ti-photo" style={{marginRight:3}}/>{p.photo_count||0} Fotos</span>
+                    </div>
+                    {p.description && <div style={{fontSize:11,color:'var(--text-tertiary)',marginTop:6,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{p.description}</div>}
+                    <div style={{fontSize:10,color:'var(--text-tertiary)',marginTop:6}}>{fmtDate(p.created_at)}</div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Auftrag-Detail-Modal */}
+          <Modal open={!!selectedAuftrag} onClose={()=>setSelectedAuftrag(null)}
+            title={selectedAuftrag?.name||'Auftrag'} maxWidth={680}>
+            {auftragDetailLoading && <Spinner/>}
+            {!auftragDetailLoading && auftragDetail && (<>
+              {/* Subtabs */}
+              <div style={{display:'flex',gap:4,borderBottom:'1px solid var(--border)',marginBottom:14}}>
+                {[
+                  {id:'docs',  label:`Dokumente (${(auftragDetail.documents||[]).length})`, icon:'ti-files'},
+                  {id:'fotos', label:`Fotos (${(auftragDetail.photos||[]).length})`,         icon:'ti-photo'},
+                ].map(t=>(
+                  <button key={t.id} onClick={()=>setAuftragTab(t.id)}
+                    style={{display:'flex',alignItems:'center',gap:5,padding:'6px 12px',fontSize:12,fontWeight:auftragTab===t.id?700:500,
+                      color:auftragTab===t.id?'var(--accent)':'var(--text-secondary)',background:'transparent',border:'none',
+                      borderBottom:auftragTab===t.id?'2px solid var(--accent)':'2px solid transparent',cursor:'pointer',marginBottom:-1}}>
+                    <i className={`ti ${t.icon}`}/>{t.label}
+                  </button>
+                ))}
+                <div style={{marginLeft:'auto',display:'flex',gap:6,alignItems:'center',paddingBottom:4}}>
+                  <span style={{fontSize:11,padding:'2px 8px',borderRadius:4,background:'var(--surface-2)',color:'var(--text-secondary)',fontWeight:600}}>
+                    {auftragDetail.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Dokumente Tab */}
+              {auftragTab === 'docs' && (
+                <div>
+                  {(auftragDetail.documents||[]).length === 0
+                    ? <div style={{textAlign:'center',padding:'24px 0',color:'var(--text-tertiary)',fontSize:13}}>
+                        <i className="ti ti-files" style={{fontSize:28,display:'block',marginBottom:6}}/>
+                        Noch keine Dokumente verknüpft
+                      </div>
+                    : <table style={{width:'100%'}}>
+                        <thead><tr><th>Nr.</th><th>Typ</th><th>Betreff</th><th>Datum</th><th style={{textAlign:'right'}}>Betrag</th><th>Status</th></tr></thead>
+                        <tbody>{(auftragDetail.documents||[]).map(d => {
+                          const typeLabel = d.type==='offer'?'Angebot':'Rechnung';
+                          const typeColor = d.type==='offer'?'var(--accent)':'var(--amber)';
+                          return (
+                            <tr key={d.id}>
+                              <td style={{fontSize:11,fontWeight:600,color:typeColor}}>{d.number}</td>
+                              <td><span style={{fontSize:10,fontWeight:700,color:typeColor,background:`${typeColor}22`,padding:'1px 6px',borderRadius:3}}>{typeLabel}</span></td>
+                              <td style={{fontSize:12}}>{d.subject||'—'}</td>
+                              <td style={{fontSize:12}}>{d.document_date ? fmtDate(d.document_date) : '—'}</td>
+                              <td style={{textAlign:'right',fontSize:13,fontWeight:600}}>{fmt(d.gross_total)}</td>
+                              <td style={{fontSize:11,color:'var(--text-secondary)'}}>{d.offer_status||d.status||'—'}</td>
+                            </tr>
+                          );
+                        })}</tbody>
+                      </table>
+                  }
+                </div>
+              )}
+
+              {/* Fotos Tab */}
+              {auftragTab === 'fotos' && (
+                <div>
+                  {/* Upload Button */}
+                  <div style={{marginBottom:12}}>
+                    <label style={{display:'inline-flex',alignItems:'center',gap:6,padding:'7px 14px',borderRadius:8,border:'1.5px dashed var(--accent)',color:'var(--accent)',cursor:'pointer',fontSize:13,fontWeight:600}}>
+                      {photoUploading ? <><Spinner size={14}/> Wird hochgeladen...</> : <><i className="ti ti-camera"/> Foto aufnehmen / hochladen</>}
+                      <input type="file" accept="image/*" capture="environment" style={{display:'none'}} onChange={uploadPhoto} disabled={photoUploading}/>
+                    </label>
+                  </div>
+
+                  {(auftragDetail.photos||[]).length === 0
+                    ? <div style={{textAlign:'center',padding:'24px 0',color:'var(--text-tertiary)',fontSize:13}}>
+                        <i className="ti ti-camera" style={{fontSize:28,display:'block',marginBottom:6}}/>
+                        Noch keine Fotos — einfach vor Ort aufnehmen!
+                      </div>
+                    : <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(130px,1fr))',gap:8}}>
+                        {(auftragDetail.photos||[]).map(ph => (
+                          <div key={ph.id} style={{position:'relative',borderRadius:8,overflow:'hidden',aspectRatio:'1',background:'var(--surface-2)',cursor:'pointer'}}
+                            onClick={()=>setLightboxPhoto(ph)}>
+                            <img
+                              src={api.projectPhotoUrl(selectedAuftrag.id, ph.id)}
+                              alt={ph.filename}
+                              style={{width:'100%',height:'100%',objectFit:'cover'}}
+                            />
+                            <button
+                              onClick={e=>{e.stopPropagation();deletePhoto(ph.id);}}
+                              style={{position:'absolute',top:4,right:4,background:'rgba(0,0,0,0.6)',border:'none',borderRadius:4,color:'#fff',width:22,height:22,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}>
+                              <i className="ti ti-x" style={{fontSize:11}}/>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                  }
+                </div>
+              )}
+            </>)}
+
+            <div style={{display:'flex',justifyContent:'flex-end',marginTop:16,gap:8}}>
+              <button className="btn" onClick={()=>setSelectedAuftrag(null)}>Schließen</button>
+            </div>
+          </Modal>
+
+          {/* Lightbox */}
+          {lightboxPhoto && selectedAuftrag && (
+            <div onClick={()=>setLightboxPhoto(null)}
+              style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.9)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',cursor:'zoom-out'}}>
+              <img
+                src={api.projectPhotoUrl(selectedAuftrag.id, lightboxPhoto.id)}
+                alt={lightboxPhoto.filename}
+                style={{maxWidth:'90vw',maxHeight:'90vh',borderRadius:8,objectFit:'contain'}}
+                onClick={e=>e.stopPropagation()}
+              />
+              <button onClick={()=>setLightboxPhoto(null)}
+                style={{position:'absolute',top:16,right:16,background:'rgba(255,255,255,0.1)',border:'none',borderRadius:8,color:'#fff',padding:'6px 10px',cursor:'pointer',fontSize:18}}>
+                <i className="ti ti-x"/>
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1364,15 +1645,11 @@ function CustomerDetail({ custId, onBack, onReloadCustomers, onNavigate }) {
         <FormGroup label="Preis/Jahr (€)"><input type="number" value={qContract.priceYearly||''} onChange={e=>setQContract(f=>({...f,priceYearly:e.target.value}))} placeholder="0.00"/></FormGroup>
       </Modal>
 
-      {/* Quick: Projekt */}
-      <Modal open={showQuickProject} onClose={()=>setShowQuickProject(false)} title="Neues Planungsprojekt" maxWidth={440}
-        footer={<><button className="btn" onClick={()=>setShowQuickProject(false)}>Abbrechen</button><button className="btn primary" onClick={saveQuickProject} disabled={quickSaving||!qProject.name}><i className="ti ti-check"/> Speichern</button></>}>
-        <FormGroup label="Projektname *"><input value={qProject.name||''} onChange={e=>setQProject(f=>({...f,name:e.target.value}))} placeholder="z.B. Klimaanlage Umbau"/></FormGroup>
-        <FormGroup label="Beschreibung"><textarea rows={2} value={qProject.description||''} onChange={e=>setQProject(f=>({...f,description:e.target.value}))}/></FormGroup>
-        <FormRow>
-          <FormGroup label="Start"><input type="date" value={qProject.startDate||today2()} onChange={e=>setQProject(f=>({...f,startDate:e.target.value}))}/></FormGroup>
-          <FormGroup label="Priorität"><select value={qProject.priority||'normal'} onChange={e=>setQProject(f=>({...f,priority:e.target.value}))}><option value="low">Niedrig</option><option value="normal">Normal</option><option value="high">Hoch</option></select></FormGroup>
-        </FormRow>
+      {/* Quick: Auftrag/Projekt anlegen */}
+      <Modal open={showQuickProject} onClose={()=>setShowQuickProject(false)} title="Neue Auftragsmappe" maxWidth={440}
+        footer={<><button className="btn" onClick={()=>setShowQuickProject(false)}>Abbrechen</button><button className="btn primary" onClick={saveQuickProject} disabled={quickSaving||!qProject.name}><i className="ti ti-check"/> Anlegen</button></>}>
+        <FormGroup label="Name *"><input value={qProject.name||''} onChange={e=>setQProject(f=>({...f,name:e.target.value}))} placeholder="z.B. Klimaanlage Büro EG, Kühlzelle Umbau"/></FormGroup>
+        <FormGroup label="Beschreibung"><textarea rows={2} value={qProject.description||''} onChange={e=>setQProject(f=>({...f,description:e.target.value}))} placeholder="Optional: Details zum Auftrag"/></FormGroup>
       </Modal>
 
       {/* Modal: Anlage bearbeiten/neu */}

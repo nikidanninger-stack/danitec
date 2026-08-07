@@ -31,11 +31,11 @@ offerRouter.post('/', authorize('admin','geschaeftsfuehrer','buchhaltung'), asyn
       // A-Nummer generieren (wenn nicht mitgegeben)
       const orderNum = req.body.orderNumber || await nextOrderNumber(req.user.company_id, 'A', client);
 
-      const { customerId,documentDate,validUntil,subject,netTotal=0,vatTotal=0,grossTotal=0,positions=[],plaudTranscript=null } = req.body;
+      const { customerId,documentDate,validUntil,subject,netTotal=0,vatTotal=0,grossTotal=0,positions=[],plaudTranscript=null,projectId=null } = req.body;
       const doc = await client.query(
-        `INSERT INTO documents (company_id,type,number,order_number,status,customer_id,document_date,due_date,subject,net_total,vat_total,gross_total,plaud_transcript,created_by)
-         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-        [req.user.company_id,nr,orderNum,customerId||null,documentDate,validUntil||null,subject||null,netTotal,vatTotal,grossTotal,plaudTranscript||null,req.user.id]);
+        `INSERT INTO documents (company_id,type,number,order_number,status,customer_id,document_date,due_date,subject,net_total,vat_total,gross_total,plaud_transcript,project_id,created_by)
+         VALUES ($1,'offer',$2,$3,'draft',$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [req.user.company_id,nr,orderNum,customerId||null,documentDate,validUntil||null,subject||null,netTotal,vatTotal,grossTotal,plaudTranscript||null,projectId||null,req.user.id]);
       const docId = doc.rows[0].id;
       await client.query('INSERT INTO offer_details (document_id,offer_status,valid_until) VALUES ($1,$2,$3)',[docId,'draft',validUntil||null]);
       for(let i=0;i<positions.length;i++) {
